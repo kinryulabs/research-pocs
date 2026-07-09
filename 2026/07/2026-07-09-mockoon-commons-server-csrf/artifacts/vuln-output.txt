@@ -1,0 +1,12 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_00a13252d7b44f32e203f4c0_OK
+
+STDERR:
+[poc] baseline /leak status 200 len 0
+[poc] env-vars POST POCECHO status 200
+[poc] env-vars PUT POCECHO status 200
+[poc] env-vars POST MOCKOON_POCECHO status 200
+[poc] env-vars PUT MOCKOON_POCECHO status 200
+[poc] primitive A succeeded

@@ -1,0 +1,51 @@
+schema_version: 1
+id: 2026-07-09-mockoon-commons-server-csrf
+title: '@mockoon/commons-server Cross-site request forgery'
+date: '2026-07-09'
+status: published
+maturity: proof-of-concept
+target:
+  product: '@mockoon/commons-server'
+  vendor: '@mockoon/commons-server'
+  ecosystem: npm
+  package: '@mockoon/commons-server'
+  purl: pkg:npm/%40mockoon/commons-server@9.7.0
+  versions:
+    range: <9.7.0
+    fixed: 9.7.0
+    introduced: null
+    vulnerable_validated: null
+classification:
+  tags:
+  - csrf
+  cwe:
+  - CWE-306
+  - CWE-352
+  - CWE-732
+  - CWE-942
+  cvss:
+    score: 8.8
+  epss:
+    score: 0.00262
+    percentile: 0.1622
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-59148
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.js
+  language: javascript
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-59148
+- https://github.com/mockoon/mockoon/commit/51eaa94c8d83b9af99b64da10f2b5c383acd8a4c

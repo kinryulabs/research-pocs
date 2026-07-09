@@ -1,0 +1,10 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+[poc] baseline /leak status 200 len 0
+[poc] env-vars POST POCECHO status 401
+[poc] env-vars PUT POCECHO status 401
+[poc] env-vars POST MOCKOON_POCECHO status 401
+[poc] env-vars PUT MOCKOON_POCECHO status 401
+[poc] env rewrite PUT status 401
+[poc] no leak — admin writes did not take effect
