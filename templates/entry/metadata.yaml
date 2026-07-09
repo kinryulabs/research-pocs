@@ -1,0 +1,30 @@
+# schema_version: 1
+id: YYYY-MM-DD-short-kebab-name          # matches folder slug
+title: ""
+date: YYYY-MM-DD                         # ISO 8601
+status: draft                            # draft | published | superseded
+
+target:
+  product: ""
+  vendor: ""
+  versions: []                           # e.g. ["<5.9.0"]
+  component: ""
+
+classification:
+  tags: []                               # must exist in TAXONOMY.md
+  cwe: null
+  cvss:
+    version: "3.1"
+    score: null
+    vector: null
+
+identifiers:
+  cve: null
+  ghsa: null
+  internal: null
+
+artifacts:
+  poc: poc.py
+  supporting: []                         # e.g. [artifacts/request.http]
+
+references: []
