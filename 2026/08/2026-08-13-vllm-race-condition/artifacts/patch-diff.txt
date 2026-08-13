@@ -1,0 +1,47 @@
+diff --git a/vllm/transformers_utils/config.py b/vllm/transformers_utils/config.py
+index b457a6e2f029..03103fbf5382 100644
+--- a/vllm/transformers_utils/config.py
++++ b/vllm/transformers_utils/config.py
+@@ -72,6 +72,7 @@ def __getitem__(self, key):
+ _CONFIG_REGISTRY: dict[str, type[PretrainedConfig]] = LazyConfigDict(
+     afmoe="AfmoeConfig",
+     arctic="ArcticConfig",
++    axk1="AXK1Config",
+     bagel="BagelConfig",
+     umm="CheersConfig",
+     chatglm="ChatGLMConfig",
+diff --git a/vllm/transformers_utils/configs/AXK1.py b/vllm/transformers_utils/configs/AXK1.py
+index 5c19a37324b0..09a3a0f46ae6 100644
+--- a/vllm/transformers_utils/configs/AXK1.py
++++ b/vllm/transformers_utils/configs/AXK1.py
+@@ -114,7 +114,7 @@ class AXK1Config(PretrainedConfig):
+             The dropout ratio for the attention probabilities.
+     """
+ 
+-    model_type = "AXK1"
++    model_type = "axk1"
+     keys_to_ignore_at_inference = ["past_key_values"]
+ 
+     def __init__(
+diff --git a/vllm/transformers_utils/model_arch_config_convertor.py b/vllm/transformers_utils/model_arch_config_convertor.py
+index bd146dff7dc9..70bb4caa5354 100644
+--- a/vllm/transformers_utils/model_arch_config_convertor.py
++++ b/vllm/transformers_utils/model_arch_config_convertor.py
+@@ -261,7 +261,7 @@ def is_deepseek_mla(self) -> bool:
+         if not hasattr(self.hf_text_config, "model_type"):
+             return False
+         elif self.hf_text_config.model_type in (
+-            "AXK1",
++            "axk1",
+             "deepseek_v2",
+             "deepseek_v3",
+             "deepseek_v32",
+@@ -290,7 +290,7 @@ def is_deepseek_mla(self) -> bool:
+             return (
+                 self.hf_text_config.model.model_type
+                 in (
+-                    "AXK1",
++                    "axk1",
+                     "deepseek_v2",
+                     "deepseek_v3",
+                     "deepseek_v32",
