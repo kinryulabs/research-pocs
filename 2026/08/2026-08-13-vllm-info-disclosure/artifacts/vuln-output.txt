@@ -1,0 +1,4 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_3e6e4f1707a6d479c9d36af9_OK
