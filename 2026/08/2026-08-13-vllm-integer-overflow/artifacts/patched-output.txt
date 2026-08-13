@@ -1,0 +1,5 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+[poc] vllm version=0.27.0 (importlib.metadata) parsed=(0, 27, 0)
+[poc] patched build (>= 0.27.0) — vulnerability removed, no marker

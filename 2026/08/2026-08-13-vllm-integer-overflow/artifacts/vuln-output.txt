@@ -1,0 +1,7 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_58db241f2743121cc6de60fa_OK
+
+STDERR:
+[poc] vllm version=0.26.0 (importlib.metadata) parsed=(0, 26, 0)

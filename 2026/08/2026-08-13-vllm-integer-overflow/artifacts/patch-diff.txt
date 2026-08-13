@@ -1,0 +1,13 @@
+diff --git a/vllm/model_executor/kernels/linear/mxfp6/base.py b/vllm/model_executor/kernels/linear/mxfp6/base.py
+index b3ba20863403..ef00bc57647d 100644
+--- a/vllm/model_executor/kernels/linear/mxfp6/base.py
++++ b/vllm/model_executor/kernels/linear/mxfp6/base.py
+@@ -18,7 +18,7 @@ class MxFp6LinearLayerConfig:
+ 
+     Attributes:
+         weight_quant_key: Identifies the weight quantization format. Can be
+-        kMxfp6E2M3Static or kMxfp6E3M2Static.
++            kMxfp6E2M3Static or kMxfp6E3M2Static.
+         activation_quant_key: Identifies the activation quantization format,
+             or `None` when activations must not be quantized.
+     """
