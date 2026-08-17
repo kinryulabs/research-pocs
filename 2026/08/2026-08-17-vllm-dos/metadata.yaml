@@ -1,0 +1,49 @@
+schema_version: 1
+id: 2026-08-17-vllm-dos
+title: vllm Uncontrolled resource consumption
+date: '2026-08-17'
+status: published
+maturity: proof-of-concept
+target:
+  product: vllm
+  vendor: vllm
+  ecosystem: PyPI
+  package: vllm
+  purl: pkg:pypi/vllm@0.26.0
+  versions:
+    range: <0.26.0
+    fixed: 0.26.0
+    introduced: null
+    vulnerable_validated: 0.25.1
+classification:
+  tags:
+  - dos
+  cwe:
+  - CWE-400
+  - CWE-770
+  cvss:
+    score: 4.3
+  epss:
+    score: 0.00466
+    percentile: 0.3783
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-71486
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.py
+  language: python
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-71486
+- https://github.com/vllm-project/vllm/commit/ffd46bfab2128bb84146050e98b51a617c6575ab
