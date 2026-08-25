@@ -1,0 +1,56 @@
+diff --git a/nltk/test/unit/test_tree.py b/nltk/test/unit/test_tree.py
+new file mode 100644
+index 0000000000..483949ae27
+--- /dev/null
++++ b/nltk/test/unit/test_tree.py
+@@ -0,0 +1,28 @@
++from nltk.tree import Tree
++
++
++def test_fromstring_allows_escaped_brackets():
++    for source in (r"(S \))", r"(S \()", r"(S (NP \)) (VP ok))"):
++        tree = Tree.fromstring(source)
++        assert str(tree) == source
++
++
++def test_fromstring_escaped_bracket_leaf_and_label():
++    tree = Tree.fromstring(r"(S (\( x))")
++    assert tree[0].label() == r"\("
++    assert tree.leaves() == ["x"]
++
++
++def test_fromstring_roundtrips_escaped_bracket_leaf():
++    # a real-world case: a leaf holding a smiley whose close paren is escaped
++    source = r"(EMOJI :\))"
++    tree = Tree.fromstring(source)
++    assert tree.label() == "EMOJI"
++    assert tree.leaves() == [r":\)"]
++    assert str(tree) == source
++
++
++def test_fromstring_normal_parsing_unaffected():
++    tree = Tree.fromstring("(S (NP the cat) (VP sat))")
++    assert tree.label() == "S"
++    assert tree.leaves() == ["the", "cat", "sat"]
+diff --git a/nltk/tree/tree.py b/nltk/tree/tree.py
+index e42854f022..64e9ef7523 100644
+--- a/nltk/tree/tree.py
++++ b/nltk/tree/tree.py
+@@ -645,10 +645,15 @@ def fromstring(
+         # Construct a regexp that will tokenize the string.
+         open_b, close_b = brackets
+         open_pattern, close_pattern = (re.escape(open_b), re.escape(close_b))
++        # A token char is either a backslash-escaped bracket (kept verbatim) or
++        # any character that is not whitespace or an unescaped bracket.
++        token_char = (
++            rf"(?:\\[{open_pattern}{close_pattern}]|[^\s{open_pattern}{close_pattern}])"
++        )
+         if node_pattern is None:
+-            node_pattern = rf"[^\s{open_pattern}{close_pattern}]+"
++            node_pattern = rf"{token_char}+"
+         if leaf_pattern is None:
+-            leaf_pattern = rf"[^\s{open_pattern}{close_pattern}]+"
++            leaf_pattern = rf"{token_char}+"
+         token_re = re.compile(
+             r"%s\s*(%s)?|%s|(%s)"
+             % (open_pattern, node_pattern, close_pattern, leaf_pattern)
