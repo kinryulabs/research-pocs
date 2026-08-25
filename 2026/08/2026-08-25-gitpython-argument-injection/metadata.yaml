@@ -1,0 +1,48 @@
+schema_version: 1
+id: 2026-08-25-gitpython-argument-injection
+title: gitpython Argument injection
+date: '2026-08-25'
+status: published
+maturity: proof-of-concept
+target:
+  product: gitpython
+  vendor: gitpython
+  ecosystem: PyPI
+  package: gitpython
+  purl: pkg:pypi/gitpython@3.1.59
+  versions:
+    range: <3.1.59
+    fixed: 3.1.59
+    introduced: null
+    vulnerable_validated: 3.1.58
+classification:
+  tags:
+  - argument-injection
+  cwe:
+  - CWE-88
+  cvss:
+    score: 9.8
+  epss:
+    score: 0.00775
+    percentile: 0.54
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-78676
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.py
+  language: python
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-78676
+- https://github.com/gitpython-developers/gitpython/commit/66340d77aab9a7468f4aed3681d4ef1e3c0ec931

@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-6 published:
+7 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-08-25 | [gitpython Argument injection](2026/08/2026-08-25-gitpython-argument-injection/) | gitpython | `argument-injection` | CVE-2026-78676 | published |
 | 2026-08-17 | [vllm Uncontrolled resource consumption](2026/08/2026-08-17-vllm-dos/) | vllm | `dos` | CVE-2026-71486 | published |
 | 2026-08-17 | [vllm Server-side request forgery](2026/08/2026-08-17-vllm-ssrf/) | vllm | `ssrf` | CVE-2026-73560 | published |
 | 2026-08-13 | [vllm Sensitive information exposure](2026/08/2026-08-13-vllm-info-disclosure/) | vllm | `info-disclosure` | CVE-2026-73555 | published |

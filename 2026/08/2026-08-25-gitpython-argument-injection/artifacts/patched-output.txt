@@ -1,0 +1,11 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+[poc] re-serialized config:
+[core]
+	dummyvar = starthooksPath = /tmp/poc_cve_2026_78676_7lto1zfs/evilhooks
+[user]
+	name = poc
+
+[poc] installed GitPython version='3.1.59' parsed=(3, 1, 59) source=metadata:GitPython
+[poc] patched serializer (version >= 3.1.59) -> canary withheld
