@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-11 published:
+12 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-02 | [httpx2 Data amplification denial of service](2026/09/2026-09-02-httpx2-dos-2/) | httpx2 | `dos` | CVE-2026-84382 | published |
 | 2026-09-02 | [httpx2 Algorithmic-complexity denial of service](2026/09/2026-09-02-httpx2-dos/) | httpx2 | `dos` | CVE-2026-84378 | published |
 | 2026-09-02 | [httpx2 HTTP request smuggling](2026/09/2026-09-02-httpx2-request-smuggling/) | httpx2 | `request-smuggling` | CVE-2026-84380 | published |
 | 2026-08-25 | [gitpython Argument injection](2026/08/2026-08-25-gitpython-argument-injection/) | gitpython | `argument-injection` | CVE-2026-78676 | published |

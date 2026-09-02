@@ -1,0 +1,4 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+no single-chunk over-threshold inflation observed (decoder bounds peak memory) — not vulnerable
