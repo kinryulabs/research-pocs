@@ -1,0 +1,4 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+Not vulnerable: framing headers are mutually exclusive ({'host': '127.0.0.1', 'transfer-encoding': 'chunked'})
