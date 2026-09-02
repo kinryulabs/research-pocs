@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-9 published:
+10 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-02 | [httpx2 Algorithmic-complexity denial of service](2026/09/2026-09-02-httpx2-dos/) | httpx2 | `dos` | CVE-2026-84378 | published |
 | 2026-08-25 | [gitpython Argument injection](2026/08/2026-08-25-gitpython-argument-injection/) | gitpython | `argument-injection` | CVE-2026-78676 | published |
 | 2026-08-25 | [NLTK Unsafe deserialization](2026/08/2026-08-25-nltk-deserialization-2/) | NLTK | `deserialization` | CVE-2026-79657 | published |
 | 2026-08-25 | [NLTK Unsafe deserialization](2026/08/2026-08-25-nltk-deserialization/) | NLTK | `deserialization` | CVE-2026-78683 | published |

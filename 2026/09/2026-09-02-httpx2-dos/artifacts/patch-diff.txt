@@ -1,0 +1,60 @@
+diff --git a/src/httpcore2/CHANGELOG.md b/src/httpcore2/CHANGELOG.md
+index 17df68da..aa27211f 100644
+--- a/src/httpcore2/CHANGELOG.md
++++ b/src/httpcore2/CHANGELOG.md
+@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
+ 
+ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+ 
++## 2.10.0 (August 9th, 2026)
++
++### Added
++
++* Add support for Python 3.15. ([#1090](https://github.com/pydantic/httpx2/pull/1090))
++
++### Changed
++
++* Avoid quadratic copying when sending large HTTP/2 request bodies. ([#1127](https://github.com/pydantic/httpx2/pull/1127))
++
++### Fixed
++
++* Propagate the original exception instead of raising `KeyError` when an HTTP/2 stream fails. ([#1093](https://github.com/pydantic/httpx2/pull/1093))
++* Start TLS for the `wss` scheme in SOCKS5 proxy connections. ([#1104](https://github.com/pydantic/httpx2/pull/1104))
++
+ ## 2.9.1 (July 24th, 2026)
+ 
+ No changes since `2.9.0`. Version bumped to stay in lockstep with `httpx2`.
+diff --git a/src/httpx2/CHANGELOG.md b/src/httpx2/CHANGELOG.md
+index e9af57ba..721ece2b 100644
+--- a/src/httpx2/CHANGELOG.md
++++ b/src/httpx2/CHANGELOG.md
+@@ -4,13 +4,27 @@ All notable changes to this project will be documented in this file.
+ 
+ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+ 
+-## Unreleased
++## 2.10.0 (August 9th, 2026)
+ 
+ ### Added
+ 
+ * Add support for running on WebAssembly / Emscripten via Pyodide, using a JavaScript
+   `fetch`-based transport defined in `httpx2-jsfetch`.
+-  ([1119](https://github.com/pydantic/httpx2/pull/1119))
++  ([#1119](https://github.com/pydantic/httpx2/pull/1119))
++* Add `max_event_size` to cap SSE event buffering. ([#1071](https://github.com/pydantic/httpx2/pull/1071))
++* Add RFC 9110 status code constants. ([#1069](https://github.com/pydantic/httpx2/pull/1069))
++* Add support for Python 3.15. ([#1090](https://github.com/pydantic/httpx2/pull/1090))
++
++### Changed
++
++* Improve SSE chunk buffering performance. ([#1117](https://github.com/pydantic/httpx2/pull/1117))
++* Skip cookie extraction for responses without `Set-Cookie` headers. ([#1107](https://github.com/pydantic/httpx2/pull/1107))
++* Return `str | None` instead of `Any` from `Headers.get`. ([#1121](https://github.com/pydantic/httpx2/pull/1121))
++
++### Fixed
++
++* Enforce the WebSocket max message size across fragmented messages. ([#1085](https://github.com/pydantic/httpx2/pull/1085))
++* Ignore unsolicited and duplicate WebSocket Pong frames. ([#1122](https://github.com/pydantic/httpx2/pull/1122))
+ 
+ ## 2.9.1 (July 24th, 2026)
+ 
