@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-12 published:
+13 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-04 | [smol-toml Infinite-loop denial of service](2026/09/2026-09-04-smol-toml-dos/) | smol-toml | `dos` | CVE-2026-85730 | published |
 | 2026-09-02 | [httpx2 Data amplification denial of service](2026/09/2026-09-02-httpx2-dos-2/) | httpx2 | `dos` | CVE-2026-84382 | published |
 | 2026-09-02 | [httpx2 Algorithmic-complexity denial of service](2026/09/2026-09-02-httpx2-dos/) | httpx2 | `dos` | CVE-2026-84378 | published |
 | 2026-09-02 | [httpx2 HTTP request smuggling](2026/09/2026-09-02-httpx2-request-smuggling/) | httpx2 | `request-smuggling` | CVE-2026-84380 | published |

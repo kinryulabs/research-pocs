@@ -1,0 +1,46 @@
+schema_version: 1
+id: 2026-09-04-smol-toml-dos
+title: smol-toml Infinite-loop denial of service
+date: '2026-09-04'
+status: published
+maturity: proof-of-concept
+target:
+  product: smol-toml
+  vendor: smol-toml
+  ecosystem: npm
+  package: smol-toml
+  purl: pkg:npm/smol-toml@1.7.1
+  versions:
+    range: <1.7.1
+    fixed: 1.7.1
+    introduced: null
+    vulnerable_validated: null
+classification:
+  tags:
+  - dos
+  cwe:
+  - CWE-606
+  - CWE-835
+  cvss:
+    score: 8.2
+  epss:
+    score: 0.00524
+    percentile: 0.4213
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-85730
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.js
+  language: javascript
+  supporting: []
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-85730
+- https://github.com/squirrelchat/smol-toml/commit/3e978a945ef9b15056d55f6ad92dd48fb05fe28e
