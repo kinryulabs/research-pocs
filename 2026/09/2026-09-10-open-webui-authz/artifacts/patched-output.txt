@@ -1,0 +1,10 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+[poc-debug] routes found: 538, callback-like: 3, token-like: 5
+[poc-debug] callback candidate oauth_client_callback (/usr/local/lib/python3.11/site-packages/open_webui/main.py): role=True session=True
+[poc-debug] exchange candidate count_message_tokens (/usr/local/lib/python3.11/site-packages/open_webui/main.py): role=False session=False
+[poc-debug] exchange candidate count_message_tokens (/usr/local/lib/python3.11/site-packages/open_webui/main.py): role=False session=False
+[poc-debug] exchange candidate get_token_usage (/usr/local/lib/python3.11/site-packages/open_webui/routers/analytics.py): role=False session=False
+[poc-debug] exchange candidate post_webhook_message (/usr/local/lib/python3.11/site-packages/open_webui/routers/channels.py): role=False session=False
+[poc-debug] exchange candidate token_exchange (/usr/local/lib/python3.11/site-packages/open_webui/routers/auths.py): role=True session=True

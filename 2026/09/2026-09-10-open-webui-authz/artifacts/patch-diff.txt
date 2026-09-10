@@ -1,0 +1,1419 @@
+diff --git a/.env.example b/.env.example
+index 6f674e6e5014..22b128ce8f63 100644
+--- a/.env.example
++++ b/.env.example
+@@ -16,6 +16,12 @@ CORS_ALLOW_ORIGIN='*'
+ # Set to false to keep memory tools enabled without adding memory context to the system context.
+ ENABLE_MEMORY_SYSTEM_CONTEXT=true
+ 
++# Set to true to add compact row/column stats to parsed CSV retrieval context.
++ENABLE_RAG_CSV_SUMMARY=false
++
++# Set to true to preserve backing file records, storage blobs, and per-file vectors when files are removed from knowledge bases.
++ENABLE_KNOWLEDGE_FILE_RETENTION=false
++
+ # Set to false to disable workspace Tools and Functions.
+ ENABLE_PLUGINS=true
+ 
+diff --git a/.github/ISSUE_TEMPLATE/bug_report.yaml b/.github/ISSUE_TEMPLATE/bug_report.yaml
+index 420633a0f6e9..1c43cb205807 100644
+--- a/.github/ISSUE_TEMPLATE/bug_report.yaml
++++ b/.github/ISSUE_TEMPLATE/bug_report.yaml
+@@ -2,7 +2,6 @@ name: Bug Report
+ description: Create a detailed bug report to help us improve Open WebUI.
+ title: 'issue: '
+ labels: ['bug', 'triage']
+-assignees: []
+ body:
+   - type: markdown
+     attributes:
+@@ -35,6 +34,8 @@ body:
+           required: true
+         - label: I have also searched in the CLOSED issues AND CLOSED discussions and found no related items (your issue might already be addressed on the development branch!).
+           required: true
++        - label: I have checked whether this issue is already fixed on the `dev` branch or in the latest source.
++          required: true
+         - label: I am using the latest version of Open WebUI.
+           required: true
+ 
+@@ -55,7 +56,7 @@ body:
+     id: open-webui-version
+     attributes:
+       label: Open WebUI Version
+-      description: Specify the version (e.g., v0.6.26)
++      description: Specify the version (e.g., v0.11.0)
+     validations:
+       required: true
+ 
+@@ -63,7 +64,7 @@ body:
+     id: ollama-version
+     attributes:
+       label: Ollama Version (if applicable)
+-      description: Specify the version (e.g., v0.2.0, or v0.1.32-rc1)
++      description: Specify the version (e.g., v0.32.5, or v0.32.6-rc0)
+     validations:
+       required: false
+ 
+@@ -71,7 +72,7 @@ body:
+     id: operating-system
+     attributes:
+       label: Operating System
+-      description: Specify the OS (e.g., Windows 10, macOS Sonoma, Ubuntu 22.04, Debian 12)
++      description: Specify the OS (e.g., Windows 11, macOS Tahoe, Ubuntu 26.04, Debian 13)
+     validations:
+       required: true
+ 
+@@ -79,7 +80,7 @@ body:
+     id: browser
+     attributes:
+       label: Browser (if applicable)
+-      description: Specify the browser/version (e.g., Chrome 100.0, Firefox 98.0)
++      description: Specify the browser/version (e.g., Chrome 151.0, Firefox 153.0.3)
+     validations:
+       required: false
+ 
+@@ -138,11 +139,11 @@ body:
+ 
+       placeholder: |
+         Example (include every detail):
+-        1. Start with a clean Ubuntu 22.04 install.
+-        2. Install Docker v24.0.5 and start the service.
++        1. Start with a clean Ubuntu 26.04 install.
++        2. Install Docker v29.7.1 and start the service.
+         3. Clone the Open WebUI repo (git clone ...).
+         4. Use the Docker Compose file without modifications.
+-        5. Open browser Chrome 115.0 in incognito mode.
++        5. Open browser Chrome 151.0 in incognito mode.
+         6. Go to http://localhost:8080 and log in with user "test@example.com".
+         7. Set the language to "English" and theme to "Dark".
+         8. Attempt to connect to Ollama at "http://localhost:11434".
+diff --git a/.github/ISSUE_TEMPLATE/feature_request.yaml b/.github/ISSUE_TEMPLATE/feature_request.yaml
+index d5f3a861326e..0972f9cb9a3b 100644
+--- a/.github/ISSUE_TEMPLATE/feature_request.yaml
++++ b/.github/ISSUE_TEMPLATE/feature_request.yaml
+@@ -36,6 +36,8 @@ body:
+       options:
+         - label: I have searched all existing **open AND closed** issues and discussions and found none comparable to my request.
+           required: true
++        - label: I have checked whether this request is already implemented on the `dev` branch or in the latest source.
++          required: true
+ 
+   - type: checkboxes
+     id: feature-scope
+diff --git a/.github/workflows/issue-label.yaml b/.github/workflows/issue-label.yaml
+index 94f0d82ead11..1a138e2f110f 100644
+--- a/.github/workflows/issue-label.yaml
++++ b/.github/workflows/issue-label.yaml
+@@ -2,7 +2,7 @@ name: Issue Labeler
+ 
+ on:
+   issues:
+-    types: [opened]
++    types: [opened, edited]
+ 
+ permissions:
+   issues: write
+@@ -22,22 +22,118 @@ jobs:
+               return;
+             }
+ 
++            const isEdit = context.payload.action === 'edited';
++            const titleWasEdited = Boolean(context.payload.changes?.title);
++
++            if (isEdit && !titleWasEdited) {
++              return;
++            }
++
+             const title = issue.title ?? '';
+             const body = issue.body ?? '';
+ 
+             // Freeform bug reports: "issue: ...", "bug: ...", "fix: ...", "[Bug] ...", "issue/UX: ..."
+-            const bugLikeTitle = /^\s*\[?(bug|issue|fix)\]?\s*[:/\-]/i.test(title);
++            const bugLikeTitle = /^\s*(\[\s*(bug|issue|fix)\b[^\]]*\]|(bug|issue|fix)\s*[:/\-])/i.test(title);
+ 
+             // API/CLI-created issues that reproduce the bug report form structure.
+             // Only headings distinctive to the bug form (both are required fields there) —
+             // generic headings like "Expected Behavior" also appear in freeform feature requests.
+             const bugFormBody = /###\s*(Installation Method|Open WebUI Version)/i.test(body);
+ 
+-            if (bugLikeTitle || bugFormBody) {
+-              await github.rest.issues.addLabels({
++            if (!bugLikeTitle && !bugFormBody) {
++              return;
++            }
++
++            if (isEdit) {
++              const events = await github.paginate(github.rest.issues.listEvents, {
+                 owner: context.repo.owner,
+                 repo: context.repo.repo,
+                 issue_number: issue.number,
+-                labels: ['bug']
++                per_page: 100
+               });
++
++              const bugLabelWasRemoved = events.some(
++                (event) => event.event === 'unlabeled' && event.label?.name === 'bug'
++              );
++
++              if (bugLabelWasRemoved) {
++                return;
++              }
+             }
++
++            await github.rest.issues.addLabels({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              issue_number: issue.number,
++              labels: ['bug']
++            });
++
++  label-feature-requests:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Add "enhancement" label to unlabeled feature requests
++        uses: actions/github-script@v7
++        with:
++          script: |
++            const issue = context.payload.issue;
++
++            if (issue.labels.some((label) => label.name === 'enhancement')) {
++              return;
++            }
++
++            // A human (or the bug form) already classified this as a bug;
++            // do not stack a second, contradictory classification on it.
++            if (issue.labels.some((label) => label.name === 'bug')) {
++              return;
++            }
++
++            const isEdit = context.payload.action === 'edited';
++            const titleWasEdited = Boolean(context.payload.changes?.title);
++
++            if (isEdit && !titleWasEdited) {
++              return;
++            }
++
++            const title = issue.title ?? '';
++            const body = issue.body ?? '';
++
++            // Feature requests: "feat: ...", "feature: ...", "feature request: ...",
++            // "enhancement: ...", "enh: ...", "[Feature Request] ..." — the feature
++            // request form titles every submission "feat: ", so form submissions are
++            // covered by the same pattern.
++            const featureLikeTitle =
++              /^\s*(\[\s*(feat|feature|enhancement|enh)\b[^\]]*\]|(feat|feature( request)?|enhancement|enh)\s*[:/\-])/i.test(
++                title
++              );
++
++            // API/CLI-created issues that reproduce the feature request form structure.
++            // Only headings distinctive to that form.
++            const featureFormBody = /###\s*(Proposed Solution|Alternatives Considered)/i.test(body);
++
++            if (!featureLikeTitle && !featureFormBody) {
++              return;
++            }
++
++            if (isEdit) {
++              const events = await github.paginate(github.rest.issues.listEvents, {
++                owner: context.repo.owner,
++                repo: context.repo.repo,
++                issue_number: issue.number,
++                per_page: 100
++              });
++
++              const enhancementLabelWasRemoved = events.some(
++                (event) => event.event === 'unlabeled' && event.label?.name === 'enhancement'
++              );
++
++              if (enhancementLabelWasRemoved) {
++                return;
++              }
++            }
++
++            await github.rest.issues.addLabels({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              issue_number: issue.number,
++              labels: ['enhancement']
++            });
+diff --git a/Dockerfile b/Dockerfile
+index 07b0e0667de7..d70244583b75 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -126,7 +126,7 @@ RUN chown -R $UID:$GID /app $HOME
+ # Install common system dependencies
+ RUN apt-get update && \
+     apt-get install -y --no-install-recommends \
+-    git build-essential pandoc gcc netcat-openbsd curl jq ca-certificates \
++    git build-essential pandoc gcc curl jq ca-certificates \
+     libmariadb-dev \
+     python3-dev \
+     ffmpeg libsm6 libxext6 zstd \
+@@ -149,7 +149,7 @@ RUN set -e; \
+     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')"; \
+     python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
+     python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ['TIKTOKEN_ENCODING_NAME'])"; \
+-    python -c "import nltk; nltk.download('punkt_tab')"; \
++    python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/local/share/nltk_data')"; \
+     else \
+     pip3 install 'torch<=2.9.1' torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --no-cache-dir; \
+     uv pip install --system -r requirements.txt --no-cache-dir; \
+@@ -158,12 +158,18 @@ RUN set -e; \
+     python -c "import os; from sentence_transformers import SentenceTransformer; SentenceTransformer(os.environ.get('AUXILIARY_EMBEDDING_MODEL', 'TaylorAI/bge-micro-v2'), device='cpu')"; \
+     python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['WHISPER_MODEL'], device='cpu', compute_type='int8', download_root=os.environ['WHISPER_MODEL_DIR'])"; \
+     python -c "import os; import tiktoken; tiktoken.get_encoding(os.environ['TIKTOKEN_ENCODING_NAME'])"; \
+-    python -c "import nltk; nltk.download('punkt_tab')"; \
++    python -c "import nltk; nltk.download('punkt_tab', download_dir='/usr/local/share/nltk_data')"; \
+     fi; \
+     fi; \
+     mkdir -p /app/backend/data; chown -R $UID:$GID /app/backend/data/; \
++    if [ -d /app/backend/data/cache ]; then chmod -R a+rX /app/backend/data/cache; fi; \
+     rm -rf /var/lib/apt/lists/*;
+ 
++# Optional: PPTX parsing through unstructured may need spaCy's English model.
++# Keep this out of the default image to avoid the extra image bloat; deployments
++# with read-only site-packages can uncomment it and bake the model in.
++# RUN python -m spacy download en_core_web_sm
++
+ # Install Ollama if requested
+ RUN if [ "$USE_OLLAMA" = "true" ]; then \
+     date +%s > /tmp/ollama_build_hash && \
+diff --git a/backend/dev.sh b/backend/dev.sh
+index 838b93f65365..9737b3d005fd 100755
+--- a/backend/dev.sh
++++ b/backend/dev.sh
+@@ -1,3 +1,3 @@
+ export CORS_ALLOW_ORIGIN="http://localhost:5173;http://localhost:8080"
+ PORT="${PORT:-8080}"
+-uvicorn open_webui.main:app --port $PORT --host 0.0.0.0 --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}" --reload
++uvicorn open_webui.main:app --port $PORT --host 0.0.0.0 --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}" --ws-per-message-deflate "${UVICORN_WS_PER_MESSAGE_DEFLATE:-true}" --reload
+diff --git a/backend/open_webui/__init__.py b/backend/open_webui/__init__.py
+index 59817d79216c..e803cea46691 100644
+--- a/backend/open_webui/__init__.py
++++ b/backend/open_webui/__init__.py
+@@ -18,6 +18,9 @@ def version_callback(value: bool) -> None:
+     if value:
+         from open_webui.env import VERSION
+ 
++        # LICENSE covers this Open WebUI CLI identifier.
++        # Do not alter, remove, obscure, or replace it except as LICENSE permits:
++        # https://docs.openwebui.com/license.
+         typer.echo(f'Open WebUI version: {VERSION}')
+         raise typer.Exit()
+ 
+@@ -71,7 +74,7 @@ def serve(
+             os.environ['LD_LIBRARY_PATH'] = ':'.join(LD_LIBRARY_PATH)
+ 
+     import open_webui.main  # noqa: F401
+-    from open_webui.env import UVICORN_WORKERS  # Import the workers setting
++    from open_webui.env import UVICORN_WORKERS, UVICORN_WS_PER_MESSAGE_DEFLATE
+ 
+     # On Windows, uvicorn's default loop factory hardcodes ProactorEventLoop,
+     # which is incompatible with psycopg v3 async.  Setting loop='none' lets
+@@ -84,6 +87,7 @@ def serve(
+         port=port,
+         forwarded_allow_ips='*',
+         workers=UVICORN_WORKERS,
++        ws_per_message_deflate=UVICORN_WS_PER_MESSAGE_DEFLATE,
+         loop=loop,
+     )
+ 
+@@ -94,12 +98,15 @@ def dev(
+     port: int = 8080,
+     reload: bool = True,
+ ):
++    from open_webui.env import UVICORN_WS_PER_MESSAGE_DEFLATE
++
+     uvicorn.run(
+         'open_webui.main:app',
+         host=host,
+         port=port,
+         reload=reload,
+         forwarded_allow_ips='*',
++        ws_per_message_deflate=UVICORN_WS_PER_MESSAGE_DEFLATE,
+     )
+ 
+ 
+diff --git a/backend/open_webui/config.py b/backend/open_webui/config.py
+index ec541f5a336e..acd3d83bf8f8 100644
+--- a/backend/open_webui/config.py
++++ b/backend/open_webui/config.py
+@@ -1,7 +1,6 @@
+ from __future__ import annotations
+ 
+ import base64
+-import json
+ import logging
+ import os
+ import shutil
+@@ -20,6 +19,7 @@
+ from open_webui.env import (
+     DATA_DIR,
+     DATABASE_URL,
++    ENABLE_ADMIN_CHAT_ACCESS,
+     ENABLE_DB_MIGRATIONS,
+     ENV,
+     FRONTEND_BUILD_DIR,
+@@ -35,11 +35,12 @@
+     log,
+ )
+ from open_webui.models.config import Config
++from open_webui.utils.json_codec import JSONCodec
+ 
+ 
+ async def seed_registered_defaults():
+     await Config.rename_prefix('rag.web', 'web')
+-    await Config.repair_flattened_dict_configs()
++    await Config.repair_config_rows()
+     await Config.seed_defaults(DEFAULT_CONFIG)
+ 
+ 
+@@ -84,7 +85,7 @@ async def import_legacy_config_json():
+     if not os.path.exists(f'{DATA_DIR}/config.json'):
+         return
+     with open(f'{DATA_DIR}/config.json', 'r') as _f:
+-        await Config.upsert(json.load(_f))
++        await Config.upsert(JSONCodec.loads(_f.read()))
+     os.rename(f'{DATA_DIR}/config.json', f'{DATA_DIR}/old_config.json')
+ 
+ 
+@@ -114,6 +115,9 @@ async def import_legacy_config_json():
+         except Exception as e:
+             logging.error(f'An error occurred: {e}')
+ 
++# LICENSE covers copied Open WebUI logo/favicon assets.
++# Do not alter, remove, obscure, or replace them except as LICENSE permits:
++# https://docs.openwebui.com/license.
+ frontend_favicon = FRONTEND_BUILD_DIR / 'static' / 'favicon.png'
+ 
+ if frontend_favicon.exists():
+@@ -181,6 +185,9 @@ async def import_legacy_config_json():
+ # CUSTOM_NAME (Legacy)
+ ####################################
+ 
++# LICENSE covers this legacy Open WebUI branding path.
++# Do not alter, remove, obscure, or replace it except as LICENSE permits:
++# https://docs.openwebui.com/license.
+ CUSTOM_NAME = os.getenv('CUSTOM_NAME', '')
+ 
+ if CUSTOM_NAME:
+@@ -270,9 +277,9 @@ def reachable(host: str, port: int) -> bool:
+ 
+     if not default.result() and fallback.result():
+         url = url.replace(':11434', ':12434')
+-        log.info(f'Ollama port 11434 unreachable on {host}, falling back to 12434')
++        log.info('Ollama port 11434 unreachable on %s, falling back to 12434', host)
+     elif not default.result():
+-        log.info(f'Ollama ports 11434 and 12434 both unreachable on {host}')
++        log.info('Ollama ports 11434 and 12434 both unreachable on %s', host)
+ 
+     return url
+ 
+@@ -293,12 +300,12 @@ def reachable(host: str, port: int) -> bool:
+ _ollama_api_configs = os.getenv('OLLAMA_API_CONFIGS', '')
+ if _ollama_api_configs:
+     try:
+-        parsed = json.loads(_ollama_api_configs)
++        parsed = JSONCodec.loads(_ollama_api_configs)
+         if isinstance(parsed, dict):
+             OLLAMA_API_CONFIGS = parsed
+         else:
+             log.warning('OLLAMA_API_CONFIGS must be a JSON object, ignoring')
+-    except (json.JSONDecodeError, TypeError):
++    except (JSONCodec.JSONDecodeError, TypeError):
+         log.warning('OLLAMA_API_CONFIGS is not valid JSON, ignoring')
+ 
+ ####################################
+@@ -340,12 +347,12 @@ def reachable(host: str, port: int) -> bool:
+ _openai_api_configs = os.getenv('OPENAI_API_CONFIGS', '')
+ if _openai_api_configs:
+     try:
+-        parsed = json.loads(_openai_api_configs)
++        parsed = JSONCodec.loads(_openai_api_configs)
+         if isinstance(parsed, dict):
+             OPENAI_API_CONFIGS = parsed
+         else:
+             log.warning('OPENAI_API_CONFIGS must be a JSON object, ignoring')
+-    except (json.JSONDecodeError, TypeError):
++    except (JSONCodec.JSONDecodeError, TypeError):
+         log.warning('OPENAI_API_CONFIGS is not valid JSON, ignoring')
+ 
+ # Get the actual OpenAI API key based on the base URL
+@@ -369,7 +376,7 @@ def reachable(host: str, port: int) -> bool:
+ ####################################
+ 
+ try:
+-    tool_server_connections = json.loads(os.getenv('TOOL_SERVER_CONNECTIONS', '[]'))
++    tool_server_connections = JSONCodec.loads(os.getenv('TOOL_SERVER_CONNECTIONS', '[]'))
+ except Exception as e:
+     log.exception(f'Error loading TOOL_SERVER_CONNECTIONS: {e}')
+     tool_server_connections = []
+@@ -383,12 +390,12 @@ def reachable(host: str, port: int) -> bool:
+ # TERMINAL_SERVER
+ ####################################
+ 
+-terminal_server_connections = json.loads(os.getenv('TERMINAL_SERVER_CONNECTIONS', '[]'))
++terminal_server_connections = JSONCodec.loads(os.getenv('TERMINAL_SERVER_CONNECTIONS', '[]'))
+ 
+ TERMINAL_SERVER_CONNECTIONS = terminal_server_connections
+ 
+ try:
+-    TERMINAL_PROXY_HEADERS = json.loads(os.getenv('TERMINAL_PROXY_HEADERS', '{}'))
++    TERMINAL_PROXY_HEADERS = JSONCodec.loads(os.getenv('TERMINAL_PROXY_HEADERS', '{}'))
+ except Exception:
+     TERMINAL_PROXY_HEADERS = {}
+ 
+@@ -805,7 +812,7 @@ def reachable(host: str, port: int) -> bool:
+             'Oracle23ai requires setting ORACLE_WALLET_DIR and ORACLE_WALLET_PASSWORD when using wallet authentication.'
+         )
+ 
+-log.info(f'VECTOR_DB: {VECTOR_DB}')
++log.info('VECTOR_DB: %s', VECTOR_DB)
+ 
+ # S3 Vector
+ S3_VECTOR_BUCKET_NAME = os.getenv('S3_VECTOR_BUCKET_NAME', None)
+@@ -894,8 +901,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ mineru_params = os.getenv('MINERU_PARAMS', '')
+ try:
+-    mineru_params = json.loads(mineru_params)
+-except json.JSONDecodeError:
++    mineru_params = JSONCodec.loads(mineru_params)
++except JSONCodec.JSONDecodeError:
+     mineru_params = {}
+ 
+ MINERU_PARAMS = mineru_params
+@@ -908,8 +915,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ external_document_loader_headers = os.getenv('EXTERNAL_DOCUMENT_LOADER_HEADERS', '')
+ try:
+-    external_document_loader_headers = json.loads(external_document_loader_headers)
+-except json.JSONDecodeError:
++    external_document_loader_headers = JSONCodec.loads(external_document_loader_headers)
++except JSONCodec.JSONDecodeError:
+     external_document_loader_headers = {}
+ if not isinstance(external_document_loader_headers, dict):
+     external_document_loader_headers = {}
+@@ -918,14 +925,16 @@ def reachable(host: str, port: int) -> bool:
+ 
+ TIKA_SERVER_URL = os.getenv('TIKA_SERVER_URL', 'http://tika:9998')
+ 
++TIKA_SERVER_VERSION = os.getenv('TIKA_SERVER_VERSION', '3')
++
+ DOCLING_SERVER_URL = os.getenv('DOCLING_SERVER_URL', 'http://docling:5001')
+ 
+ DOCLING_API_KEY = os.getenv('DOCLING_API_KEY', '')
+ 
+ docling_params = os.getenv('DOCLING_PARAMS', '')
+ try:
+-    docling_params = json.loads(docling_params)
+-except json.JSONDecodeError:
++    docling_params = JSONCodec.loads(docling_params)
++except JSONCodec.JSONDecodeError:
+     docling_params = {}
+ 
+ DOCLING_PARAMS = docling_params
+@@ -966,6 +975,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ RAG_FILE_MAX_SIZE = int(os.getenv('RAG_FILE_MAX_SIZE')) if os.getenv('RAG_FILE_MAX_SIZE') else None
+ 
++ENABLE_KNOWLEDGE_FILE_RETENTION = os.getenv('ENABLE_KNOWLEDGE_FILE_RETENTION', 'False').lower() == 'true'
++
+ RAG_FILE_CONTENT_SEARCH_MAX_CHARS = int(os.getenv('RAG_FILE_CONTENT_SEARCH_MAX_CHARS', str(64 * 1024 * 1024)))
+ 
+ FILE_IMAGE_COMPRESSION_WIDTH = (
+@@ -988,7 +999,7 @@ def reachable(host: str, port: int) -> bool:
+ PDF_LOADER_MODE = os.getenv('PDF_LOADER_MODE', 'page')
+ 
+ RAG_EMBEDDING_MODEL = os.getenv('RAG_EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+-log.info(f'Embedding model set: {RAG_EMBEDDING_MODEL}')
++log.info('Embedding model set: %s', RAG_EMBEDDING_MODEL)
+ 
+ RAG_TOKENIZER_MODEL = os.getenv('RAG_TOKENIZER_MODEL', '')
+ 
+@@ -1016,7 +1027,7 @@ def reachable(host: str, port: int) -> bool:
+ 
+ RAG_RERANKING_MODEL = os.getenv('RAG_RERANKING_MODEL', '')
+ if RAG_RERANKING_MODEL != '':
+-    log.info(f'Reranking model set: {RAG_RERANKING_MODEL}')
++    log.info('Reranking model set: %s', RAG_RERANKING_MODEL)
+ 
+ 
+ RAG_RERANKING_MODEL_AUTO_UPDATE = (
+@@ -1100,12 +1111,26 @@ def reachable(host: str, port: int) -> bool:
+ ENABLE_RAG_LOCAL_WEB_FETCH = ENABLE_LOCAL_WEB_FETCH
+ 
+ 
++# Operators extend this through WEB_FETCH_FILTER_LIST.
+ DEFAULT_WEB_FETCH_FILTER_LIST = [
+     '!169.254.169.254',
+     '!fd00:ec2::254',
+     '!metadata.google.internal',
+     '!metadata.azure.com',
+     '!100.100.100.200',
++    '!168.63.129.16',  # Azure platform channel, reachable from every Azure VM
++    '!192.88.99.0/24',  # 6to4 relay anycast, deprecated by RFC 7526
++    '!224.0.0.0/4',  # IPv4 multicast
++    '!::ffff:0:0:0/96',  # IPv4-translated (SIIT, RFC 2765), never routed
++    '!64:ff9b:1::/48',  # NAT64 local-use prefix, RFC 8215, not a public destination
++    '!100:0:0:1::/64',  # dummy prefix, RFC 9780
++    '!2001:1::1',  # PCP anycast, RFC 7723, answered by the local network's own edge device
++    '!2001:1::2',  # TURN anycast, RFC 8155, likewise
++    '!2001:20::/28',  # ORCHIDv2, RFC 7343, never routed
++    '!2001:30::/28',  # DRIP, RFC 9374, never routed
++    '!5f00::/16',  # SRv6 SIDs, RFC 9602, internal to one segment routing domain
++    '!fec0::/10',  # IPv6 site-local, deprecated by RFC 3879
++    '!ff00::/8',  # IPv6 multicast
+ ]
+ 
+ web_fetch_filter_list = os.getenv('WEB_FETCH_FILTER_LIST', '')
+@@ -1148,7 +1173,7 @@ def reachable(host: str, port: int) -> bool:
+ 
+ 
+ try:
+-    web_search_domain_filter_list = json.loads(os.getenv('WEB_SEARCH_DOMAIN_FILTER_LIST', '[]'))
++    web_search_domain_filter_list = JSONCodec.loads(os.getenv('WEB_SEARCH_DOMAIN_FILTER_LIST', '[]'))
+ except Exception as e:
+     web_search_domain_filter_list = [
+         # "wikipedia.com",
+@@ -1297,8 +1322,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ linkup_search_params = os.getenv('LINKUP_SEARCH_PARAMS', '')
+ try:
+-    linkup_search_params = json.loads(linkup_search_params)
+-except json.JSONDecodeError:
++    linkup_search_params = JSONCodec.loads(linkup_search_params)
++except JSONCodec.JSONDecodeError:
+     linkup_search_params = {}
+ 
+ LINKUP_SEARCH_PARAMS = linkup_search_params
+@@ -1330,8 +1355,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ automatic1111_params = os.getenv('AUTOMATIC1111_PARAMS', '')
+ try:
+-    automatic1111_params = json.loads(automatic1111_params)
+-except json.JSONDecodeError:
++    automatic1111_params = JSONCodec.loads(automatic1111_params)
++except JSONCodec.JSONDecodeError:
+     automatic1111_params = {}
+ 
+ AUTOMATIC1111_PARAMS = automatic1111_params
+@@ -1455,8 +1480,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ comfyui_workflow_nodes = os.getenv('COMFYUI_WORKFLOW_NODES', '')
+ try:
+-    comfyui_workflow_nodes = json.loads(comfyui_workflow_nodes)
+-except json.JSONDecodeError:
++    comfyui_workflow_nodes = JSONCodec.loads(comfyui_workflow_nodes)
++except JSONCodec.JSONDecodeError:
+     comfyui_workflow_nodes = []
+ 
+ COMFYUI_WORKFLOW_NODES = comfyui_workflow_nodes
+@@ -1468,8 +1493,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ images_openai_params = os.getenv('IMAGES_OPENAI_PARAMS', '')
+ try:
+-    images_openai_params = json.loads(images_openai_params)
+-except json.JSONDecodeError:
++    images_openai_params = JSONCodec.loads(images_openai_params)
++except JSONCodec.JSONDecodeError:
+     images_openai_params = {}
+ 
+ 
+@@ -1507,8 +1532,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ images_edit_comfyui_workflow_nodes = os.getenv('IMAGES_EDIT_COMFYUI_WORKFLOW_NODES', '')
+ try:
+-    images_edit_comfyui_workflow_nodes = json.loads(images_edit_comfyui_workflow_nodes)
+-except json.JSONDecodeError:
++    images_edit_comfyui_workflow_nodes = JSONCodec.loads(images_edit_comfyui_workflow_nodes)
++except JSONCodec.JSONDecodeError:
+     images_edit_comfyui_workflow_nodes = []
+ 
+ IMAGES_EDIT_COMFYUI_WORKFLOW_NODES = images_edit_comfyui_workflow_nodes
+@@ -1582,8 +1607,8 @@ def reachable(host: str, port: int) -> bool:
+ 
+ audio_tts_openai_params = os.getenv('AUDIO_TTS_OPENAI_PARAMS', '')
+ try:
+-    audio_tts_openai_params = json.loads(audio_tts_openai_params)
+-except json.JSONDecodeError:
++    audio_tts_openai_params = JSONCodec.loads(audio_tts_openai_params)
++except JSONCodec.JSONDecodeError:
+     audio_tts_openai_params = {}
+ 
+ AUDIO_TTS_OPENAI_PARAMS = audio_tts_openai_params
+@@ -1635,7 +1660,7 @@ def reachable(host: str, port: int) -> bool:
+ DEFAULT_PINNED_MODELS = os.getenv('DEFAULT_PINNED_MODELS', None)
+ 
+ try:
+-    default_prompt_suggestions = json.loads(os.getenv('DEFAULT_PROMPT_SUGGESTIONS', '[]'))
++    default_prompt_suggestions = JSONCodec.loads(os.getenv('DEFAULT_PROMPT_SUGGESTIONS', '[]'))
+ except Exception as e:
+     log.exception(f'Error loading DEFAULT_PROMPT_SUGGESTIONS: {e}')
+     default_prompt_suggestions = []
+@@ -1673,7 +1698,7 @@ def reachable(host: str, port: int) -> bool:
+ DEFAULT_PROMPT_SUGGESTIONS = default_prompt_suggestions
+ 
+ try:
+-    model_order_list = json.loads(os.getenv('MODEL_ORDER_LIST', '[]'))
++    model_order_list = JSONCodec.loads(os.getenv('MODEL_ORDER_LIST', '[]'))
+ except Exception as e:
+     log.exception(f'Error loading MODEL_ORDER_LIST: {e}')
+     model_order_list = []
+@@ -1681,7 +1706,7 @@ def reachable(host: str, port: int) -> bool:
+ MODEL_ORDER_LIST = model_order_list
+ 
+ try:
+-    default_model_metadata = json.loads(os.getenv('DEFAULT_MODEL_METADATA', '{}'))
++    default_model_metadata = JSONCodec.loads(os.getenv('DEFAULT_MODEL_METADATA', '{}'))
+ except Exception as e:
+     log.exception(f'Error loading DEFAULT_MODEL_METADATA: {e}')
+     default_model_metadata = {}
+@@ -1689,13 +1714,22 @@ def reachable(host: str, port: int) -> bool:
+ DEFAULT_MODEL_METADATA = default_model_metadata
+ 
+ try:
+-    default_model_params = json.loads(os.getenv('DEFAULT_MODEL_PARAMS', '{}'))
++    default_model_params = JSONCodec.loads(os.getenv('DEFAULT_MODEL_PARAMS', '{}'))
+ except Exception as e:
+     log.exception(f'Error loading DEFAULT_MODEL_PARAMS: {e}')
+     default_model_params = {}
+ 
+ DEFAULT_MODEL_PARAMS = default_model_params
+ 
++
++try:
++    default_interface_settings = JSONCodec.loads(os.getenv('DEFAULT_INTERFACE_SETTINGS', '{}'))
++except Exception as e:
++    log.exception(f'Error loading DEFAULT_INTERFACE_SETTINGS: {e}')
++    default_interface_settings = {}
++
++DEFAULT_INTERFACE_SETTINGS = default_interface_settings if isinstance(default_interface_settings, dict) else {}
++
+ DEFAULT_USER_ROLE = os.getenv('DEFAULT_USER_ROLE', 'pending')
+ 
+ DEFAULT_GROUP_ID = os.getenv('DEFAULT_GROUP_ID', '')
+@@ -2032,7 +2066,7 @@ def reachable(host: str, port: int) -> bool:
+ 
+ ENABLE_EVALUATION_ARENA_MODELS = os.getenv('ENABLE_EVALUATION_ARENA_MODELS', 'True').lower() == 'true'
+ try:
+-    evaluation_arena_models = json.loads(os.getenv('EVALUATION_ARENA_MODELS', '[]'))
++    evaluation_arena_models = JSONCodec.loads(os.getenv('EVALUATION_ARENA_MODELS', '[]'))
+     if not isinstance(evaluation_arena_models, list) or not all(
+         isinstance(model, dict) for model in evaluation_arena_models
+     ):
+@@ -2047,6 +2081,9 @@ def reachable(host: str, port: int) -> bool:
+     'id': 'arena-model',
+     'name': 'Arena Model',
+     'meta': {
++        # LICENSE covers this Open WebUI fallback logo.
++        # Do not alter, remove, obscure, or replace it except as LICENSE permits:
++        # https://docs.openwebui.com/license.
+         'profile_image_url': '/favicon.png',
+         'description': 'Submit your questions to anonymous AI chatbots and vote on the best response.',
+         'model_ids': None,
+@@ -2067,8 +2104,6 @@ def reachable(host: str, port: int) -> bool:
+     == 'true'
+ )
+ 
+-ENABLE_ADMIN_CHAT_ACCESS = os.getenv('ENABLE_ADMIN_CHAT_ACCESS', 'True').lower() == 'true'
+-
+ ENABLE_ADMIN_ANALYTICS = os.getenv('ENABLE_ADMIN_ANALYTICS', 'True').lower() == 'true'
+ 
+ ENABLE_COMMUNITY_SHARING = os.getenv('ENABLE_COMMUNITY_SHARING', 'True').lower() == 'true'
+@@ -2079,6 +2114,7 @@ def reachable(host: str, port: int) -> bool:
+ 
+ # FastAPI / AnyIO settings
+ THREAD_POOL_SIZE = os.getenv('THREAD_POOL_SIZE', None)
++THREAD_POOL_THREAD_NAME_PREFIX = os.getenv('THREAD_POOL_THREAD_NAME_PREFIX', '')
+ 
+ if THREAD_POOL_SIZE is not None and isinstance(THREAD_POOL_SIZE, str):
+     try:
+@@ -2134,7 +2170,7 @@ class BannerModel(BaseModel):
+ 
+ 
+ try:
+-    banners = json.loads(os.getenv('WEBUI_BANNERS', '[]'))
++    banners = JSONCodec.loads(os.getenv('WEBUI_BANNERS', '[]'))
+     banners = [BannerModel(**banner) for banner in banners]
+ except Exception as e:
+     log.exception(f'Error loading WEBUI_BANNERS: {e}')
+@@ -2157,10 +2193,20 @@ class BannerModel(BaseModel):
+ 
+ TASK_MODEL_EXTERNAL = os.getenv('TASK_MODEL_EXTERNAL', '')
+ 
++try:
++    task_model_params = JSONCodec.loads(os.getenv('TASK_MODEL_PARAMS', '{}'))
++except Exception as e:
++    log.exception(f'Error loading TASK_MODEL_PARAMS: {e}')
++    task_model_params = {}
++
++TASK_MODEL_PARAMS = task_model_params
++
+ CONTEXT_COMPACTION_MODEL = os.getenv('CONTEXT_COMPACTION_MODEL', '')
+ 
+ ENABLE_CONTEXT_COMPACTION = os.getenv('ENABLE_CONTEXT_COMPACTION', 'False').lower() == 'true'
+ 
++ENABLE_TOOL_PERMISSIONS = os.getenv('ENABLE_TOOL_PERMISSIONS', 'False').lower() == 'true'
++
+ CONTEXT_COMPACTION_TOKEN_THRESHOLD = int(os.getenv('CONTEXT_COMPACTION_TOKEN_THRESHOLD', '80000'))
+ 
+ _CONTEXT_COMPACTION_TOKEN_CAP = os.getenv('CONTEXT_COMPACTION_TOKEN_CAP')
+@@ -2470,12 +2516,12 @@ class BannerModel(BaseModel):
+ _google_oauth_authorize_params = os.getenv('GOOGLE_OAUTH_AUTHORIZE_PARAMS', '')
+ if _google_oauth_authorize_params:
+     try:
+-        _parsed = json.loads(_google_oauth_authorize_params)
++        _parsed = JSONCodec.loads(_google_oauth_authorize_params)
+         if isinstance(_parsed, dict):
+             GOOGLE_OAUTH_AUTHORIZE_PARAMS = _parsed
+         else:
+             log.warning('GOOGLE_OAUTH_AUTHORIZE_PARAMS must be a JSON object, ignoring')
+-    except (json.JSONDecodeError, TypeError):
++    except (JSONCodec.JSONDecodeError, TypeError):
+         log.warning('GOOGLE_OAUTH_AUTHORIZE_PARAMS is not valid JSON, ignoring')
+ 
+ MICROSOFT_CLIENT_ID = os.getenv('MICROSOFT_CLIENT_ID', '')
+@@ -2590,12 +2636,12 @@ class BannerModel(BaseModel):
+ _oauth_authorize_params = os.getenv('OAUTH_AUTHORIZE_PARAMS', '')
+ if _oauth_authorize_params:
+     try:
+-        _parsed = json.loads(_oauth_authorize_params)
++        _parsed = JSONCodec.loads(_oauth_authorize_params)
+         if isinstance(_parsed, dict):
+             OAUTH_AUTHORIZE_PARAMS = _parsed
+         else:
+             log.warning('OAUTH_AUTHORIZE_PARAMS must be a JSON object, ignoring')
+-    except (json.JSONDecodeError, TypeError):
++    except (JSONCodec.JSONDecodeError, TypeError):
+         log.warning('OAUTH_AUTHORIZE_PARAMS is not valid JSON, ignoring')
+ 
+ 
+@@ -2848,6 +2894,7 @@ def feishu_oauth_register(oauth: OAuth):
+     'rag.external_document_loader_api_key': EXTERNAL_DOCUMENT_LOADER_API_KEY,
+     'rag.external_document_loader_headers': EXTERNAL_DOCUMENT_LOADER_HEADERS,
+     'rag.tika_server_url': TIKA_SERVER_URL,
++    'rag.tika_server_version': TIKA_SERVER_VERSION,
+     'rag.docling_server_url': DOCLING_SERVER_URL,
+     'rag.docling_api_key': DOCLING_API_KEY,
+     'rag.docling_params': DOCLING_PARAMS,
+@@ -3046,6 +3093,7 @@ def feishu_oauth_register(oauth: OAuth):
+     'ui.default_locale': DEFAULT_LOCALE,
+     'ui.default_models': DEFAULT_MODELS,
+     'ui.default_pinned_models': DEFAULT_PINNED_MODELS,
++    'ui.default_interface_settings': DEFAULT_INTERFACE_SETTINGS,
+     'ui.prompt_suggestions': DEFAULT_PROMPT_SUGGESTIONS,
+     'ui.model_order_list': MODEL_ORDER_LIST,
+     'models.default_metadata': DEFAULT_MODEL_METADATA,
+@@ -3085,12 +3133,14 @@ def feishu_oauth_register(oauth: OAuth):
+     'auth.admin.email': ADMIN_EMAIL,
+     'task.model.default': TASK_MODEL,
+     'task.model.external': TASK_MODEL_EXTERNAL,
++    'task.model.params': TASK_MODEL_PARAMS,
+     'chat.context_compaction.model': CONTEXT_COMPACTION_MODEL,
+     'chat.context_compaction.enable': ENABLE_CONTEXT_COMPACTION,
+     'chat.context_compaction.token_threshold': CONTEXT_COMPACTION_TOKEN_THRESHOLD,
+     'chat.context_compaction.token_cap': CONTEXT_COMPACTION_TOKEN_CAP,
+     'chat.context_compaction.retention_percentage': CONTEXT_COMPACTION_RETENTION_PERCENTAGE,
+     'chat.context_compaction.prompt_template': CONTEXT_COMPACTION_PROMPT_TEMPLATE,
++    'chat.tool_permissions.enable': ENABLE_TOOL_PERMISSIONS,
+     'task.title.prompt_template': TITLE_GENERATION_PROMPT_TEMPLATE,
+     'task.tags.prompt_template': TAGS_GENERATION_PROMPT_TEMPLATE,
+     'task.image.prompt_template': IMAGE_PROMPT_GENERATION_PROMPT_TEMPLATE,
+diff --git a/backend/open_webui/constants.py b/backend/open_webui/constants.py
+index c4d6b8f3db54..3ce8d6cf26b0 100644
+--- a/backend/open_webui/constants.py
++++ b/backend/open_webui/constants.py
+@@ -99,7 +99,7 @@ def __str__(self) -> str:
+ 
+     INVALID_URL = 'The URL you provided is invalid. Please double-check and try again.'
+ 
+-    WEB_SEARCH_ERROR = lambda err='': err if err else 'Something went wrong while searching the web.'
++    WEB_SEARCH_ERROR = 'Something went wrong while searching the web.'
+ 
+     OLLAMA_API_DISABLED = 'The Ollama API is disabled. Please enable it to use this feature.'
+ 
+@@ -118,9 +118,15 @@ def __str__(self) -> str:
+     AUTOMATION_TOO_FREQUENT = lambda interval='': f'Schedule too frequent. Minimum interval is {interval} seconds.'
+     AUTOMATION_INVALID_RRULE = lambda err='': f'Invalid RRULE: {err}'
+     AUTOMATION_NO_FUTURE_RUNS = 'RRULE has no future occurrences'
++    AUTOMATION_COUNT_REQUIRES_DTSTART = (
++        'RRULE with COUNT requires an explicit DTSTART line to anchor the occurrence window'
++    )
+ 
+     FEATURE_DISABLED = lambda name='': f'{name} is disabled'
+     INPUT_TOO_LONG = lambda size='': f'Input prompt exceeds maximum length of {size}'
++    # LICENSE covers this Open WebUI error identifier.
++    # Do not alter, remove, obscure, or replace it except as LICENSE permits:
++    # https://docs.openwebui.com/license.
+     SERVER_CONNECTION_ERROR = 'Open WebUI: Server Connection Error'
+     REQUIRED_FIELD_EMPTY = lambda name='': f'Required field {name} is empty'
+     OAUTH_NOT_CONFIGURED = lambda name='': f"Provider '{name}' is not configured"
+diff --git a/backend/open_webui/env.py b/backend/open_webui/env.py
+index 6c49b4863822..b17df7340ab5 100644
+--- a/backend/open_webui/env.py
++++ b/backend/open_webui/env.py
+@@ -227,7 +227,7 @@ def parse_section(section):
+ 
+     # Check if the data directory exists in the package directory
+     if DATA_DIR.exists() and DATA_DIR != NEW_DATA_DIR:
+-        log.info(f'Moving {DATA_DIR} to {NEW_DATA_DIR}')
++        log.info('Moving %s to %s', DATA_DIR, NEW_DATA_DIR)
+         for item in DATA_DIR.iterdir():
+             dest = NEW_DATA_DIR / item.name
+             if item.is_dir():
+@@ -353,18 +353,18 @@ def parse_section(section):
+ # truncated.  67108864 ≈ 64 MB.  Set to -1 for no limit (SQLite default).
+ DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT = os.getenv('DATABASE_SQLITE_PRAGMA_JOURNAL_SIZE_LIMIT', '67108864')
+ 
+-DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = os.getenv('DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL', None)
+-if DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL is not None:
+-    try:
+-        DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = float(DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL)
+-    except Exception:
+-        DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = 0.0
++# Seconds between presence writes per user per worker; keep under the 180s active-user window. 0 disables.
++try:
++    DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = float(os.getenv('DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL', '60'))
++except ValueError:
++    DATABASE_USER_ACTIVE_STATUS_UPDATE_INTERVAL = 60.0
+ 
+ DATABASE_ENABLE_SESSION_SHARING = os.getenv('DATABASE_ENABLE_SESSION_SHARING', 'False').lower() == 'true'
+ ENABLE_PUBLIC_ACTIVE_USERS_COUNT = os.getenv('ENABLE_PUBLIC_ACTIVE_USERS_COUNT', 'True').lower() == 'true'
+ RESET_CONFIG_ON_START = os.getenv('RESET_CONFIG_ON_START', 'False').lower() == 'true'
+ ENABLE_REALTIME_CHAT_SAVE = os.getenv('ENABLE_REALTIME_CHAT_SAVE', 'False').lower() == 'true'
+ ENABLE_QUERIES_CACHE = os.getenv('ENABLE_QUERIES_CACHE', 'False').lower() == 'true'
++ENABLE_ADMIN_CHAT_ACCESS = os.getenv('ENABLE_ADMIN_CHAT_ACCESS', 'True').lower() == 'true'
+ RAG_SYSTEM_CONTEXT = os.getenv('RAG_SYSTEM_CONTEXT', 'False').lower() == 'true'
+ 
+ ####################################
+@@ -376,6 +376,11 @@ def parse_section(section):
+ 
+ REDIS_KEY_PREFIX = os.getenv('REDIS_KEY_PREFIX', 'open-webui')
+ 
++try:
++    REDIS_RESPONSE_STREAM_TTL = int(os.getenv('REDIS_RESPONSE_STREAM_TTL', '3600'))
++except ValueError:
++    REDIS_RESPONSE_STREAM_TTL = 3600
++
+ REDIS_SENTINEL_HOSTS = os.getenv('REDIS_SENTINEL_HOSTS', '')
+ REDIS_SENTINEL_PORT = os.getenv('REDIS_SENTINEL_PORT', '26379')
+ 
+@@ -443,6 +448,9 @@ def parse_section(section):
+ except (ValueError, TypeError):
+     UVICORN_WORKERS = 1
+ 
++# tiny delta-stream frames make per-frame websocket compression CPU-bound, allow opting out (true/false)
++UVICORN_WS_PER_MESSAGE_DEFLATE = os.getenv('UVICORN_WS_PER_MESSAGE_DEFLATE', 'True').lower() == 'true'
++
+ ####################################
+ # WEBSOCKET SUPPORT
+ ####################################
+@@ -499,6 +507,15 @@ def parse_section(section):
+ except ValueError:
+     WEBSOCKET_SERVER_PING_INTERVAL = 25
+ 
++WEBSOCKET_HEARTBEAT_INTERVAL = os.getenv('WEBSOCKET_HEARTBEAT_INTERVAL', '')
++if WEBSOCKET_HEARTBEAT_INTERVAL == '':
++    WEBSOCKET_HEARTBEAT_INTERVAL = None
++else:
++    try:
++        WEBSOCKET_HEARTBEAT_INTERVAL = min(max(int(WEBSOCKET_HEARTBEAT_INTERVAL), 5), 90)
++    except ValueError:
++        WEBSOCKET_HEARTBEAT_INTERVAL = 30
++
+ WEBSOCKET_EVENT_CALLER_TIMEOUT = os.getenv('WEBSOCKET_EVENT_CALLER_TIMEOUT', '')
+ 
+ if WEBSOCKET_EVENT_CALLER_TIMEOUT == '':
+@@ -571,6 +588,8 @@ def _parse_ssl_env(value: str) -> 'bool | _ssl.SSLContext':
+ 
+ REQUESTS_VERIFY = os.getenv('REQUESTS_VERIFY', 'True').lower() == 'true'
+ 
++TAVILY_API_BASE_URL = os.getenv('TAVILY_API_BASE_URL', 'https://api.tavily.com').rstrip('/')
++
+ _aiohttp_timeout_raw = os.getenv('AIOHTTP_CLIENT_TIMEOUT', '')
+ try:
+     AIOHTTP_CLIENT_TIMEOUT = int(_aiohttp_timeout_raw) if _aiohttp_timeout_raw else None
+@@ -602,6 +621,18 @@ def _parse_ssl_env(value: str) -> 'bool | _ssl.SSLContext':
+ # When False (default), outbound HTTP requests do not follow 3xx redirects.
+ AIOHTTP_CLIENT_ALLOW_REDIRECTS = os.getenv('AIOHTTP_CLIENT_ALLOW_REDIRECTS', 'False').lower() == 'true'
+ 
++# Opt-in c-ares DNS resolution (aiodns). Off by default: c-ares breaks name
++# resolution in some environments (#28013, #28215). Must run before any
++# TCPConnector is constructed.
++AIOHTTP_CLIENT_ASYNC_DNS_RESOLVER = os.getenv('AIOHTTP_CLIENT_ASYNC_DNS_RESOLVER', 'False').lower() == 'true'
++
++if not AIOHTTP_CLIENT_ASYNC_DNS_RESOLVER:
++    import aiohttp
++
++    aiohttp.DefaultResolver = aiohttp.resolver.ThreadedResolver  # for plugin code
++    aiohttp.resolver.DefaultResolver = aiohttp.resolver.ThreadedResolver
++    aiohttp.connector.DefaultResolver = aiohttp.resolver.ThreadedResolver
++
+ # Optional User-Agent override for outbound web-loader fetches.  When set,
+ # SafeWebBaseLoader sends this value instead of the default python-requests UA
+ # which is aggressively blocked by Cloudflare, Wikipedia, and similar services.
+@@ -791,6 +822,16 @@ def _parse_ssl_env(value: str) -> 'bool | _ssl.SSLContext':
+ # for non-admin users.  When False (default), unknown collection names are
+ # denied — closing the legacy unscoped namespace.
+ ENABLE_RETRIEVAL_UNSCOPED_COLLECTIONS = os.getenv('ENABLE_RETRIEVAL_UNSCOPED_COLLECTIONS', 'False').lower() == 'true'
++
++# Falls back to the upload size limit, because a document cannot legitimately carry more metadata
++# than the file itself is allowed to be. Left unbounded, a small archive that expands enormously
++# during extraction can exhaust memory. RAG_FILE_MAX_SIZE is in MB.
++RAG_METADATA_MAX_VALUE_CHARS = (
++    int(os.getenv('RAG_METADATA_MAX_VALUE_CHARS'))
++    if os.getenv('RAG_METADATA_MAX_VALUE_CHARS')
++    else ((int(os.getenv('RAG_FILE_MAX_SIZE', '0')) or 0) * 1024 * 1024 or None)
++)
++
+ MINERU_MAX_MARKDOWN_BYTES = (
+     int(os.getenv('MINERU_MAX_MARKDOWN_BYTES')) if os.getenv('MINERU_MAX_MARKDOWN_BYTES') else None
+ )
+@@ -888,10 +929,18 @@ def _parse_ssl_env(value: str) -> 'bool | _ssl.SSLContext':
+ # WEBUI Identity
+ ####################################
+ 
++# LICENSE covers this Open WebUI branding surface, including name, logo,
++# visual, textual, symbolic identifiers, metadata, and surrounding UI.
++# Do not alter, remove, obscure, or replace it except as LICENSE permits:
++# https://docs.openwebui.com/license.
+ WEBUI_NAME = os.getenv('WEBUI_NAME', 'Open WebUI')
+ if WEBUI_NAME != 'Open WebUI':
+     WEBUI_NAME += ' (Open WebUI)'
+ 
++# LICENSE covers this Open WebUI branding surface, including this favicon
++# and any visual, textual, or symbolic identifiers it preserves.
++# Do not alter, remove, obscure, or replace it except as LICENSE permits:
++# https://docs.openwebui.com/license.
+ WEBUI_FAVICON_URL = 'https://openwebui.com/favicon.png'
+ WEBUI_BUILD_HASH = os.getenv('WEBUI_BUILD_HASH', 'dev-build')
+ TRUSTED_SIGNATURE_KEY = os.getenv('TRUSTED_SIGNATURE_KEY', '')
+@@ -948,6 +997,10 @@ def _parse_ssl_env(value: str) -> 'bool | _ssl.SSLContext':
+ # Progressive Web App
+ ####################################
+ 
++# LICENSE covers this install-time Open WebUI branding surface, including
++# names, logos, manifests, metadata, and surrounding UI.
++# Do not alter, remove, obscure, or replace it except as LICENSE permits:
++# https://docs.openwebui.com/license.
+ EXTERNAL_PWA_MANIFEST_URL = os.getenv('EXTERNAL_PWA_MANIFEST_URL', None)
+ 
+ ####################################
+diff --git a/backend/open_webui/events.py b/backend/open_webui/events.py
+index 999a1c826c38..81b8cc396814 100644
+--- a/backend/open_webui/events.py
++++ b/backend/open_webui/events.py
+@@ -411,6 +411,11 @@ class EventDefinitions(BaseModel):
+         description='Retrieval content was processed.',
+         message='Retrieval Content processed',
+     )
++    RETRIEVAL_CONTENT_PROCESS_FAILED: EventDefinition = EventDefinition(
++        name='retrieval.content.process_failed',
++        description='Retrieval content processing failed.',
++        message='Retrieval Content process failed',
++    )
+     RETRIEVAL_COLLECTION_DELETED: EventDefinition = EventDefinition(
+         name='retrieval.collection.deleted',
+         description='A retrieval collection was deleted.',
+@@ -666,6 +671,7 @@ class EventDefinitions(BaseModel):
+     EVENTS.CHAT_FAILED.name,
+     EVENTS.CHANNEL_MESSAGE.name,
+     EVENTS.CALENDAR_ALERT.name,
++    EVENTS.RETRIEVAL_CONTENT_PROCESS_FAILED.name,
+ )
+ 
+ 
+@@ -1026,6 +1032,9 @@ def build_event(
+ 
+ 
+ async def dispatch_webhook_event(app: Any, event: Event) -> None:
++    # LICENSE covers this Open WebUI webhook identifier.
++    # Do not alter, remove, obscure, or replace it except as LICENSE permits:
++    # https://docs.openwebui.com/license.
+     name = getattr(getattr(app, 'state', None), 'WEBUI_NAME', 'Open WebUI')
+     subject = event.subject or {}
+     subject_id = subject.get('id')
+@@ -1077,6 +1086,20 @@ async def handle_event(self, app: Any, event: Event, request: Any | None = None)
+             schedule_notification_dispatch(app, event)
+ 
+ 
++class SocketSessionEventSink:
++    async def handle_event(self, app: Any, event: Event, request: Any | None = None) -> None:
++        if event.event not in {EVENTS.USER_DELETED.name, EVENTS.USER_ROLE_UPDATED.name}:
++            return
++
++        subject = event.subject or {}
++        if subject.get('type') != 'user' or not subject.get('id'):
++            return
++
++        from open_webui.socket.main import disconnect_user_sessions
++
++        await disconnect_user_sessions(str(subject['id']))
++
++
+ async def dispatch_event_functions(
+     app: Any, event: Event, request: Any | None = None, extra_function_ids: list[str] | None = None
+ ) -> None:
+@@ -1145,7 +1168,7 @@ async def handle_event(self, app: Any, event: Event, request: Any | None = None)
+         schedule_event_function_dispatch(app, event, request)
+ 
+ 
+-EVENT_SINKS = [EventFunctionSink(), WebhookEventSink(), NotificationEventSink()]
++EVENT_SINKS = [SocketSessionEventSink(), EventFunctionSink(), WebhookEventSink(), NotificationEventSink()]
+ 
+ 
+ async def publish_event(
+diff --git a/backend/open_webui/functions.py b/backend/open_webui/functions.py
+index 1900ee752c1b..41e1a42d9eee 100644
+--- a/backend/open_webui/functions.py
++++ b/backend/open_webui/functions.py
+@@ -1,6 +1,5 @@
+ import asyncio
+ import inspect
+-import json
+ import logging
+ import sys
+ from typing import AsyncGenerator, Generator, Iterator
+@@ -29,6 +28,7 @@
+     get_event_emitter,
+ )
+ from open_webui.utils.access_control import check_model_access
++from open_webui.utils.json_codec import JSONCodec
+ from open_webui.utils.misc import (
+     add_or_update_system_message,
+     get_last_user_message,
+@@ -100,7 +100,7 @@ async def get_function_models(request):
+                     log.exception(e)
+                     sub_pipes = []
+ 
+-                log.debug(f"get_function_models: function '{pipe.id}' is a manifold of {sub_pipes}")
++                log.debug("get_function_models: function '%s' is a manifold of %s", pipe.id, sub_pipes)
+ 
+                 for p in sub_pipes:
+                     sub_pipe_id = f'{pipe.id}.{p["id"]}'
+@@ -126,7 +126,10 @@ async def get_function_models(request):
+                 pipe_flag = {'type': 'pipe'}
+ 
+                 log.debug(
+-                    f"get_function_models: function '{pipe.id}' is a single pipe {{ 'id': {pipe.id}, 'name': {pipe.name} }}"
++                    "get_function_models: function '%s' is a single pipe { 'id': %s, 'name': %s }",
++                    pipe.id,
++                    pipe.id,
++                    pipe.name,
+                 )
+ 
+                 pipe_models.append(
+@@ -170,7 +173,7 @@ def process_line(form_data: dict, line):
+             line = line.model_dump_json()
+             line = f'data: {line}'
+         if isinstance(line, dict):
+-            line = f'data: {json.dumps(line)}'
++            line = f'data: {JSONCodec.dumps(line)}'
+ 
+         try:
+             line = line.decode('utf-8')
+@@ -181,7 +184,7 @@ def process_line(form_data: dict, line):
+             return f'{line}\n\n'
+         else:
+             line = openai_chat_chunk_message_template(form_data['model'], line)
+-            return f'data: {json.dumps(line)}\n\n'
++            return f'data: {JSONCodec.dumps(line)}\n\n'
+ 
+     def get_pipe_id(form_data: dict) -> str:
+         pipe_id = form_data['model']
+@@ -209,6 +212,9 @@ async def get_function_params(function_module, form_data, user, extra_params=Non
+ 
+         return params
+ 
++    # Set server-side by utils/chat.py, never by client input. Mirrors the routers.
++    bypass_system_prompt = getattr(request.state, 'bypass_system_prompt', False)
++
+     # Copy so the base-model substitution below doesn't leak into the caller's
+     # payload, which the tool-call continuation re-submits. Mirrors the routers.
+     form_data = {**form_data}
+@@ -288,7 +294,8 @@ async def get_function_params(function_module, form_data, user, extra_params=Non
+         if params:
+             system = params.pop('system', None)
+             form_data = apply_model_params_to_body_openai(params, form_data)
+-            form_data = await apply_system_prompt_to_body(system, form_data, metadata, user)
++            if not bypass_system_prompt:
++                form_data = await apply_system_prompt_to_body(system, form_data, metadata, user)
+ 
+     pipe_id = get_pipe_id(form_data)
+     function_module = await get_function_module_by_id(request, pipe_id)
+@@ -308,17 +315,17 @@ async def stream_content():
+                         yield data
+                     return
+                 if isinstance(res, dict):
+-                    yield f'data: {json.dumps(res)}\n\n'
++                    yield f'data: {JSONCodec.dumps(res)}\n\n'
+                     return
+ 
+             except Exception as e:
+                 log.error(f'Error: {e}')
+-                yield f'data: {json.dumps({"error": {"detail": str(e)}})}\n\n'
++                yield f'data: {JSONCodec.dumps({"error": {"detail": str(e)}})}\n\n'
+                 return
+ 
+             if isinstance(res, str):
+                 message = openai_chat_chunk_message_template(form_data['model'], res)
+-                yield f'data: {json.dumps(message)}\n\n'
++                yield f'data: {JSONCodec.dumps(message)}\n\n'
+ 
+             if isinstance(res, Iterator):
+                 for line in res:
+@@ -330,7 +337,7 @@ async def stream_content():
+ 
+             finish_message = openai_chat_chunk_message_template(form_data['model'], '')
+             finish_message['choices'][0]['finish_reason'] = 'stop'
+-            yield f'data: {json.dumps(finish_message)}\n\n'
++            yield f'data: {JSONCodec.dumps(finish_message)}\n\n'
+             yield 'data: [DONE]'
+ 
+         return StreamingResponse(stream_content(), media_type='text/event-stream')
+diff --git a/backend/open_webui/internal/db.py b/backend/open_webui/internal/db.py
+index acce09ed6df9..aa96d2f2a0c5 100644
+--- a/backend/open_webui/internal/db.py
++++ b/backend/open_webui/internal/db.py
+@@ -1,6 +1,5 @@
+ from __future__ import annotations
+ 
+-import json
+ import logging
+ import os
+ import sys
+@@ -28,6 +27,7 @@
+     ENABLE_DB_MIGRATIONS,
+     OPEN_WEBUI_DIR,
+ )
++from open_webui.utils.json_codec import JSONCodec
+ from sqlalchemy import Dialect, MetaData, create_engine, event, types
+ from sqlalchemy.engine.url import make_url
+ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+@@ -124,18 +124,18 @@ class JSONField(types.TypeDecorator):  # TEXT-backed JSON storage
+     """Store arbitrary Python objects as JSON-encoded TEXT.
+ 
+     Used instead of native JSON columns for portability across SQLite and
+-    PostgreSQL.  Values are serialized with ``json.dumps`` on write and
+-    deserialized with ``json.loads`` on read.
++    PostgreSQL.  Values are serialized with ``JSONCodec.dumps`` on write and
++    deserialized with ``JSONCodec.loads`` on read.
+     """
+ 
+     impl = types.UnicodeText
+     cache_ok = True
+ 
+     def process_bind_param(self, value: _T | None, dialect: Dialect) -> Any:
+-        return json.dumps(value) if value is not None else None
++        return JSONCodec.dumps(value) if value is not None else None
+ 
+     def process_result_value(self, value: _T | None, dialect: Dialect) -> Any:
+-        return json.loads(value) if value is not None else None
++        return JSONCodec.loads(value) if value is not None else None
+ 
+     def copy(self, **kwargs: Any) -> Self:
+         return JSONField(length=self.impl.length)
+@@ -202,6 +202,20 @@ def enable_iam_token_auth(connectable) -> None:
+         return
+ 
+     engine = getattr(connectable, 'sync_engine', connectable)
++    url = engine.url
++    auth = _rds_iam_token_auth
++    # The token is bound to one host/port/user pair; leave other databases on their own credentials.
++    if (url.host, url.port or 5432, url.username) != (auth.host, auth.port, auth.username):
++        log.warning(
++            'AWS RDS IAM token auth not applied to %s: the token is issued for %s@%s:%s, '
++            'so this connection uses the password from its own URL',
++            url.render_as_string(hide_password=True),
++            auth.username,
++            auth.host,
++            auth.port,
++        )
++        return
++
+     if not event.contains(engine, 'do_connect', _set_iam_token_password):
+         event.listen(engine, 'do_connect', _set_iam_token_password)
+ 
+@@ -232,6 +246,27 @@ def _make_async_url(url: str) -> str:
+     return url
+ 
+ 
++def _json_codec_kwargs(kwargs: dict) -> dict:
++    """Default an engine to JSONCodec for native ``JSON`` columns.
++
++    Unlike ``JSONField``, those serialize through the engine, which otherwise uses
++    stdlib ``json``. With ``ENABLE_ORJSON`` off JSONCodec is stdlib ``json`` anyway.
++    """
++    kwargs.setdefault('json_serializer', JSONCodec.dumps)
++    kwargs.setdefault('json_deserializer', JSONCodec.loads)
++    return kwargs
++
++
++def _create_engine(*args, **kwargs):
++    """``create_engine`` with the app JSON codec wired in."""
++    return create_engine(*args, **_json_codec_kwargs(kwargs))
++
++
++def _create_async_engine(*args, **kwargs):
++    """``create_async_engine`` with the app JSON codec wired in."""
++    return create_async_engine(*args, **_json_codec_kwargs(kwargs))
++
++
+ # ============================================================
+ # SYNC ENGINE (used only for: startup migrations, config loading,
+ #              Alembic, peewee migration, health checks)
+@@ -260,7 +295,7 @@ def create_sqlcipher_connection():
+     # in the native sqlcipher3 C library. Use NullPool by default for safety,
+     # or QueuePool if DATABASE_POOL_SIZE is explicitly configured.
+     if isinstance(DATABASE_POOL_SIZE, int) and DATABASE_POOL_SIZE > 0:
+-        engine = create_engine(
++        engine = _create_engine(
+             'sqlite://',
+             creator=create_sqlcipher_connection,
+             pool_size=DATABASE_POOL_SIZE,
+@@ -272,7 +307,7 @@ def create_sqlcipher_connection():
+             echo=False,
+         )
+     else:
+-        engine = create_engine(
++        engine = _create_engine(
+             'sqlite://',
+             creator=create_sqlcipher_connection,
+             poolclass=NullPool,
+@@ -282,7 +317,7 @@ def create_sqlcipher_connection():
+     log.info('Connected to encrypted SQLite database using SQLCipher')
+ 
+ elif 'sqlite' in SQLALCHEMY_DATABASE_URL:
+-    engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={'check_same_thread': False})
++    engine = _create_engine(SQLALCHEMY_DATABASE_URL, connect_args={'check_same_thread': False})
+ 
+     def _apply_sqlite_pragmas(dbapi_connection):
+         """Apply all configured SQLite PRAGMAs to a raw DBAPI connection."""
+@@ -314,7 +349,7 @@ def on_connect(dbapi_connection, connection_record):
+ else:
+     if isinstance(DATABASE_POOL_SIZE, int):
+         if DATABASE_POOL_SIZE > 0:
+-            engine = create_engine(
++            engine = _create_engine(
+                 SQLALCHEMY_DATABASE_URL,
+                 pool_size=DATABASE_POOL_SIZE,
+                 max_overflow=DATABASE_POOL_MAX_OVERFLOW,
+@@ -324,9 +359,9 @@ def on_connect(dbapi_connection, connection_record):
+                 poolclass=QueuePool,
+             )
+         else:
+-            engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True, poolclass=NullPool)
++            engine = _create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True, poolclass=NullPool)
+     else:
+-        engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
++        engine = _create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
+ 
+ enable_iam_token_auth(engine)
+ 
+@@ -373,7 +408,7 @@ def get_session():
+     # No pool_pre_ping: a local SQLite file cannot drop connections, and the
+     # ping costs a worker-thread hop plus a SELECT 1 on every checkout.
+     _sqlite_pool_size = DATABASE_POOL_SIZE if isinstance(DATABASE_POOL_SIZE, int) and DATABASE_POOL_SIZE > 0 else 512
+-    async_engine = create_async_engine(
++    async_engine = _create_async_engine(
+         ASYNC_SQLALCHEMY_DATABASE_URL,
+         connect_args={'check_same_thread': False},
+         pool_size=_sqlite_pool_size,
+@@ -387,7 +422,7 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):
+ else:
+     if isinstance(DATABASE_POOL_SIZE, int):
+         if DATABASE_POOL_SIZE > 0:
+-            async_engine = create_async_engine(
++            async_engine = _create_async_engine(
+                 ASYNC_SQLALCHEMY_DATABASE_URL,
+                 pool_size=DATABASE_POOL_SIZE,
+                 max_overflow=DATABASE_POOL_MAX_OVERFLOW,
+@@ -396,13 +431,13 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):
+                 pool_pre_ping=True,
+             )
+         else:
+-            async_engine = create_async_engine(
++            async_engine = _create_async_engine(
+                 ASYNC_SQLALCHEMY_DATABASE_URL,
+                 pool_pre_ping=True,
+                 poolclass=NullPool,
+             )
+     else:
+-        async_engine = create_async_engine(
++        async_engine = _create_async_engine(
+             ASYNC_SQLALCHEMY_DATABASE_URL,
+             pool_pre_ping=True,
+         )
+diff --git a/backend/open_webui/main.py b/backend/open_webui/main.py
+index 55613ac83d47..c84a394b870d 100644
+--- a/backend/open_webui/main.py
++++ b/backend/open_webui/main.py
+@@ -1,17 +1,19 @@
+ from __future__ import annotations
+ 
+ import asyncio
+-import json
++import copy
+ import logging
+ import mimetypes
+ import os
+ import sys
+ import time
++from concurrent.futures import ThreadPoolExecutor
+ from contextlib import asynccontextmanager
+ from uuid import uuid4
+ 
+ import aiohttp
+ import anyio.to_thread
++from cryptography.fernet import InvalidToken
+ from fastapi import (
+     Depends,
+     FastAPI,
+@@ -64,6 +66,7 @@
+     ONEDRIVE_SHAREPOINT_URL,
+     STATIC_DIR,
+     THREAD_POOL_SIZE,
++    THREAD_POOL_THREAD_NAME_PREFIX,
+     WEBUI_AUTH,
+     WEBUI_NAME,
+     async_reset_config,
+@@ -83,19 +86,19 @@
+     ENABLE_COMPRESSION_MIDDLEWARE,
+     ENABLE_CUSTOM_MODEL_FALLBACK,
+     ENABLE_EASTER_EGGS,
+-    ENABLE_PLUGINS,
+-    EXTERNAL_PWA_MANIFEST_URL,
+     # OAuth Back-Channel Logout
+     ENABLE_OAUTH_BACKCHANNEL_LOGOUT,
+     ENABLE_OTEL,
++    ENABLE_PLUGINS,
+     ENABLE_PUBLIC_ACTIVE_USERS_COUNT,
++    ENABLE_PYODIDE_FILE_PERSISTENCE,
+     # SCIM
+     ENABLE_SCIM,
+     ENABLE_SIGNUP_PASSWORD_CONFIRMATION,
+     ENABLE_STAR_SESSIONS_MIDDLEWARE,
+-    ENABLE_PYODIDE_FILE_PERSISTENCE,
+     ENABLE_VERSION_UPDATE_CHECK,
+     ENABLE_WEBSOCKET_SUPPORT,
++    EXTERNAL_PWA_MANIFEST_URL,
+     GLOBAL_LOG_LEVEL,
+     INSTANCE_ID,
+     LICENSE_KEY,
+@@ -108,6 +111,7 @@
+     SAFE_MODE,
+     SCIM_TOKEN,
+     VERSION,
++    WEBSOCKET_HEARTBEAT_INTERVAL,
+     # Admin Account Runtime Creation
+     WEBUI_ADMIN_EMAIL,
+     WEBUI_ADMIN_NAME,
+@@ -121,12 +125,14 @@
+ from open_webui.events import (
+     EVENTS,
+     delete_event_webhook,
+-    get_event_catalog as get_event_catalog_items,
+     get_event_webhooks,
+    
+...[diff truncated]...
