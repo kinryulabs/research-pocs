@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-14 published:
+15 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-14 | [yayson Prototype pollution](2026/09/2026-09-14-yayson-prototype-pollution/) | yayson | `prototype-pollution` | CVE-2026-61534 | published |
 | 2026-09-10 | [open-webui Incorrect authorization](2026/09/2026-09-10-open-webui-authz/) | open-webui | `authz` | CVE-2026-88006 | published |
 | 2026-09-04 | [smol-toml Infinite-loop denial of service](2026/09/2026-09-04-smol-toml-dos/) | smol-toml | `dos` | CVE-2026-85730 | published |
 | 2026-09-02 | [httpx2 Data amplification denial of service](2026/09/2026-09-02-httpx2-dos-2/) | httpx2 | `dos` | CVE-2026-84382 | published |

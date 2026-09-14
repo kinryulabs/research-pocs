@@ -1,0 +1,48 @@
+schema_version: 1
+id: 2026-09-14-yayson-prototype-pollution
+title: yayson Prototype pollution
+date: '2026-09-14'
+status: published
+maturity: proof-of-concept
+target:
+  product: yayson
+  vendor: yayson
+  ecosystem: npm
+  package: yayson
+  purl: pkg:npm/yayson@4.3.0
+  versions:
+    range: <4.3.0
+    fixed: 4.3.0
+    introduced: null
+    vulnerable_validated: null
+classification:
+  tags:
+  - prototype-pollution
+  cwe:
+  - CWE-1321
+  cvss:
+    score: 9.1
+  epss:
+    score: 0.0084
+    percentile: 0.5619
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-61534
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.js
+  language: javascript
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-61534
+- https://github.com/confetti/yayson/commit/3b84b9cc6d17bcd4576051ca56815d8c9b5c352f
