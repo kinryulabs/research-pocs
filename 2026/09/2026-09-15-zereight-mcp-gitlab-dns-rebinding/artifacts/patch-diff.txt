@@ -1,0 +1,31 @@
+diff --git a/package.json b/package.json
+index bf1d901e1..8762a8740 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@zereight/mcp-gitlab",
+-  "version": "2.1.29",
++  "version": "2.1.30",
+   "mcpName": "io.github.zereight/gitlab-mcp",
+   "description": "GitLab MCP server for projects, merge requests, issues, pipelines, wiki, releases, and more",
+   "keywords": [
+diff --git a/server.json b/server.json
+index a7ea4cf52..b043c6e39 100644
+--- a/server.json
++++ b/server.json
+@@ -6,12 +6,12 @@
+     "url": "https://github.com/zereight/gitlab-mcp",
+     "source": "github"
+   },
+-  "version": "2.1.29",
++  "version": "2.1.30",
+   "packages": [
+     {
+       "registryType": "npm",
+       "identifier": "@zereight/mcp-gitlab",
+-      "version": "2.1.29",
++      "version": "2.1.30",
+       "transport": {
+         "type": "stdio"
+       },

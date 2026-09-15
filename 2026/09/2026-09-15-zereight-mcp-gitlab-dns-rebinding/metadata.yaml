@@ -1,0 +1,48 @@
+schema_version: 1
+id: 2026-09-15-zereight-mcp-gitlab-dns-rebinding
+title: '@zereight/mcp-gitlab DNS rebinding / missing host allowlist'
+date: '2026-09-15'
+status: published
+maturity: proof-of-concept
+target:
+  product: '@zereight/mcp-gitlab'
+  vendor: '@zereight/mcp-gitlab'
+  ecosystem: npm
+  package: '@zereight/mcp-gitlab'
+  purl: pkg:npm/%40zereight/mcp-gitlab@2.1.30
+  versions:
+    range: <2.1.30
+    fixed: 2.1.30
+    introduced: null
+    vulnerable_validated: null
+classification:
+  tags:
+  - dns-rebinding
+  cwe:
+  - CWE-350
+  cvss:
+    score: 9.6
+  epss:
+    score: 0.00532
+    percentile: 0.4269
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-61568
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.js
+  language: javascript
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-61568
+- https://github.com/zereight/gitlab-mcp/commit/cff3ebeec272d7cc609d9b3cab57f52cb15fae96
