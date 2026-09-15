@@ -1,0 +1,56 @@
+diff --git a/ember-core/shared/src/main/scala/org/http4s/ember/core/Parser.scala b/ember-core/shared/src/main/scala/org/http4s/ember/core/Parser.scala
+index 4381851e6cc..f0cdd776299 100644
+--- a/ember-core/shared/src/main/scala/org/http4s/ember/core/Parser.scala
++++ b/ember-core/shared/src/main/scala/org/http4s/ember/core/Parser.scala
+@@ -201,6 +201,9 @@ private[ember] object Parser {
+     case object UnsupportedTransferEncoding extends Exception with NoStackTrace {
+       override val getMessage = "UnsupportedTransferEncoding"
+     }
++    case object ContentLengthAndTransferEncoding extends Exception with NoStackTrace {
++      override val getMessage = "ContentLengthAndTransferEncoding"
++    }
+     final case class ParseHeadersError(cause: Throwable)
+         extends Exception(
+           s"Encountered Error Attempting to Parse Headers - ${cause.getMessage}",
+@@ -364,6 +367,13 @@ private[ember] object Parser {
+           headers = headerP.headers,
+         )
+ 
++        _ <-
++          if (headerP.chunked && headerP.contentLength.isDefined)
++            F.raiseError[Unit](
++              HeaderP.ParseHeadersError(HeaderP.ContentLengthAndTransferEncoding)
++            )
++          else F.unit
++
+         request <-
+           if (headerP.chunked) {
+             Ref.of[F, Option[Array[Byte]]](None).product(Deferred[F, Headers]).map {
+diff --git a/ember-core/shared/src/test/scala/org/http4s/ember/core/ParserSuite.scala b/ember-core/shared/src/test/scala/org/http4s/ember/core/ParserSuite.scala
+index f2946c34b44..204668f258c 100644
+--- a/ember-core/shared/src/test/scala/org/http4s/ember/core/ParserSuite.scala
++++ b/ember-core/shared/src/test/scala/org/http4s/ember/core/ParserSuite.scala
+@@ -711,7 +711,8 @@ class ParsingSuite extends Http4sSuite {
+ 
+   test("HeaderP should accept only 'chunked' Transfer-Encoding, case-insensitively") {
+     def parse(headers: String) = {
+-      val raw = Helpers.httpifyString(s"$headers\n\n")
++      val raw = Helpers
++        .httpifyString(s"$headers\n\n")
+         .getBytes(java.nio.charset.StandardCharsets.UTF_8)
+       Parser.HeaderP.parse[IO](raw, 4096, Parser.HeaderP.ParserState.initial)
+     }
+@@ -740,4 +741,13 @@ class ParsingSuite extends Http4sSuite {
+       }
+     } yield ()
+   }
++
++  test("Request.parser should reject Transfer-Encoding combined with Content-Length") {
++    val raw = "POST / HTTP/1.1\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n"
++    Helpers.taking[IO, Byte](Stream.chunk(Chunk.array(raw.getBytes()))).flatMap { take =>
++      interceptMessageIO[ParseHeadersError](
++        "Encountered Error Attempting to Parse Headers - ContentLengthAndTransferEncoding"
++      )(Parser.Request.parser[IO](4096)(Array.emptyByteArray, take))
++    }
++  }
+ }

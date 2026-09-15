@@ -1,0 +1,4 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+ls: /usr/bin/mvn
