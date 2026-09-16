@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-17 published:
+18 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-16 | [djust Missing authorization](2026/09/2026-09-16-djust-authz/) | djust | `authz` | CVE-2026-61594 | published |
 | 2026-09-15 | [@zereight/mcp-gitlab DNS rebinding / missing host allowlist](2026/09/2026-09-15-zereight-mcp-gitlab-dns-rebinding/) | @zereight/mcp-gitlab | `dns-rebinding` | CVE-2026-61568 | published |
 | 2026-09-15 | [org.http4s:http4s-ember-core_2.12 HTTP request smuggling](2026/09/2026-09-15-org-http4s-http4s-ember-core-2-12-request-smuggling/) | org.http4s:http4s-ember-core_2.12 | `request-smuggling` | CVE-2026-69204 | published |
 | 2026-09-14 | [yayson Prototype pollution](2026/09/2026-09-14-yayson-prototype-pollution/) | yayson | `prototype-pollution` | CVE-2026-61534 | published |

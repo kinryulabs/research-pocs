@@ -1,0 +1,51 @@
+schema_version: 1
+id: 2026-09-16-djust-authz
+title: djust Missing authorization
+date: '2026-09-16'
+status: published
+maturity: proof-of-concept
+target:
+  product: djust
+  vendor: djust
+  ecosystem: PyPI
+  package: djust
+  purl: pkg:pypi/djust@1.0.7
+  versions:
+    range: <1.0.7
+    fixed: 1.0.7
+    introduced: null
+    vulnerable_validated: 1.0.6
+classification:
+  tags:
+  - authz
+  cwe:
+  - CWE-306
+  - CWE-862
+  cvss:
+    score: 9.1
+    version: '3.1'
+    vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+  epss:
+    score: 0.00485
+    percentile: 0.3932
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-61594
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.py
+  language: python
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-61594
+- https://github.com/djust-org/djust/commit/e7f6751723e76219d3062f3391231fec3c736ab3

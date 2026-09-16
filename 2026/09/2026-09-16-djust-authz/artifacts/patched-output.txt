@@ -1,0 +1,7 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+[poc] imported 330 djust modules
+[poc] base view: djust.simple_live_view.LiveView
+[poc] external check_view_auth candidates: 1
+[poc] check_view_auth DENIED anonymous gated mount (patched)

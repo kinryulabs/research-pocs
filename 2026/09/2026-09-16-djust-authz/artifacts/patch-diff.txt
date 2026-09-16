@@ -1,0 +1,65 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 5d3d0d3be..9418c25f4 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -9,7 +9,7 @@ members = [
+ resolver = "2"
+ 
+ [workspace.package]
+-version = "1.0.7-rc.1"
++version = "1.0.7"
+ edition = "2021"
+ authors = ["djust contributors"]
+ license = "MIT"
+diff --git a/pyproject.toml b/pyproject.toml
+index 59785f1e5..948a88057 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "maturin"
+ 
+ [project]
+ name = "djust"
+-version = "1.0.7rc1"
++version = "1.0.7"
+ description = "Phoenix LiveView-style reactive components for Django with Rust-powered performance. Real-time UI updates over WebSocket, no JavaScript build step required."
+ authors = [{name = "djust contributors"}]
+ readme = "README.md"
+diff --git a/python/djust/__init__.py b/python/djust/__init__.py
+index 3540925a7..629f99cb2 100644
+--- a/python/djust/__init__.py
++++ b/python/djust/__init__.py
+@@ -75,7 +75,7 @@
+     # Rust components not yet built - this is optional
+     rust_components = None  # noqa: F841 — accessed as djust.rust_components by user code
+ 
+-__version__ = "1.0.7rc1"
++__version__ = "1.0.7"
+ 
+ 
+ def enable_hot_reload():
+diff --git a/python/djust/components/__init__.py b/python/djust/components/__init__.py
+index 91d39e711..b5849576e 100644
+--- a/python/djust/components/__init__.py
++++ b/python/djust/components/__init__.py
+@@ -33,7 +33,7 @@ def mount(self, request):
+     python manage.py component_gallery
+ """
+ 
+-__version__ = "1.0.7rc1"
++__version__ = "1.0.7"
+ 
+ # ---------------------------------------------------------------------------
+ # Core component classes (original djust.components)
+diff --git a/uv.lock b/uv.lock
+index 3e4466352..b2a810eea 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -585,7 +585,7 @@ wheels = [
+ 
+ [[package]]
+ name = "djust"
+-version = "1.0.7rc1"
++version = "1.0.7"
+ source = { editable = "." }
+ dependencies = [
+     { name = "channels", extra = ["daphne"] },
