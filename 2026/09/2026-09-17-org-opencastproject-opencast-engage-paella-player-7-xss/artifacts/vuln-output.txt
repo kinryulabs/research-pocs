@@ -1,0 +1,7 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_b4194eb45953845a916559c0_OK
+
+STDERR:
+ls: /usr/bin/mvn

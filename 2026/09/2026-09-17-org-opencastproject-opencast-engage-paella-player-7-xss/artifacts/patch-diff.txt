@@ -1,0 +1,183 @@
+diff --git a/modules/engage-paella-player-8/package.json b/modules/engage-paella-player-8/package.json
+index 400f4d1d903..c5443edfb81 100644
+--- a/modules/engage-paella-player-8/package.json
++++ b/modules/engage-paella-player-8/package.json
+@@ -16,8 +16,8 @@
+     "check": "npm run eslint && npm run html-linter && npm run html-validate"
+   },
+   "devDependencies": {
+-    "@asicupv/paella-embedapi": "^2.11.1",
+-    "@asicupv/paella-opencast-component": "^2.0.1",
++    "@asicupv/paella-embedapi": "^2.12.1",
++    "@asicupv/paella-opencast-component": "^2.0.4",
+     "@tailwindcss/vite": "^4.1.11",
+     "eslint-config-opencast": "file:../../docs/checkstyle/eslint-config",
+     "express": "^5.1.0",
+@@ -27,13 +27,13 @@
+     "vite-plugin-static-copy": "^3.1.4"
+   },
+   "dependencies": {
+-    "@asicupv/paella-basic-plugins": "^2.5.0",
+-    "@asicupv/paella-extra-plugins": "^2.7.0",
+-    "@asicupv/paella-opencast-core": "^2.0.0",
+-    "@asicupv/paella-opencast-plugins": "^2.0.0",
+-    "@asicupv/paella-slide-plugins": "^2.5.0",
+-    "@asicupv/paella-video-plugins": "^2.3.0",
+-    "@asicupv/paella-webgl-plugins": "^2.3.0",
+-    "@asicupv/paella-zoom-plugin": "^2.4.0"
++    "@asicupv/paella-basic-plugins": "^2.6.2",
++    "@asicupv/paella-extra-plugins": "^2.9.2",
++    "@asicupv/paella-opencast-core": "^2.0.5",
++    "@asicupv/paella-opencast-plugins": "^2.0.5",
++    "@asicupv/paella-slide-plugins": "^2.6.2",
++    "@asicupv/paella-video-plugins": "^2.5.3",
++    "@asicupv/paella-webgl-plugins": "^2.4.2",
++    "@asicupv/paella-zoom-plugin": "^2.5.4"
+   }
+ }
+diff --git a/modules/engage-paella-player-8/src/applyQueryParams.ts b/modules/engage-paella-player-8/src/applyQueryParams.ts
+index 84b13a40567..f39fba44055 100644
+--- a/modules/engage-paella-player-8/src/applyQueryParams.ts
++++ b/modules/engage-paella-player-8/src/applyQueryParams.ts
+@@ -1,7 +1,6 @@
+-import { getHashParameter, getUrlParameter } from "@asicupv/paella-opencast-core";
++import { getHashParameter, getUrlParameter } from '@asicupv/paella-opencast-core';
+ import type { Paella, TrimmingParams } from '@asicupv/paella-core';
+ 
+-
+ /**
+  * Converts a human-readable time string (e.g., "1h2m3s") into seconds.
+  */
+@@ -30,16 +29,15 @@ function humanTimeToSeconds(humanTime: string): number {
+  */
+ async function setTrimming(player: Paella, trimmingData: Required<TrimmingParams>): Promise<void> {
+     const { start, end, enabled } = trimmingData;
+-    if (enabled && start > 0 && start < end ) {
+-        await player.videoContainer.setTrimming(trimmingData);
++    if (enabled && start > 0 && start < end) {
++        await player.videoContainer?.setTrimming(trimmingData);
+     }
+-};
+-
++}
+ 
+ async function applyTrimmingFromQueryParams(paella: Paella): Promise<void> {
+     // Enable trimming
+     // Retrieve video duration in case a default trim end time is needed
+-    const videoDuration = await paella.duration();    
++    const videoDuration = (await paella.duration()) ?? 0;
+     let trimmingData = { start: 0, end: videoDuration, enabled: false };
+ 
+     // Retrieve trimming data in URL param: ?trimming=1m2s;2m
+@@ -57,47 +55,57 @@ async function applyTrimmingFromQueryParams(paella: Paella): Promise<void> {
+             const trimmingSplit = trimming.split(';');
+             if (trimmingSplit.length == 2) {
+                 startTrimming = trimmingData.start + humanTimeToSeconds(trimmingSplit[0]);
+-                endTrimming = (trimmingData.end == 0)
+-                    ? trimmingData.start + humanTimeToSeconds(trimmingSplit[1])
+-                    : Math.min(trimmingData.start + humanTimeToSeconds(trimmingSplit[1]), trimmingData.end);
++                endTrimming =
++                    trimmingData.end == 0
++                        ? trimmingData.start + humanTimeToSeconds(trimmingSplit[1])
++                        : Math.min(
++                              trimmingData.start + humanTimeToSeconds(trimmingSplit[1]),
++                              trimmingData.end,
++                          );
+             }
+-        }
+-        else {
++        } else {
+             if (startTrimVal) {
+                 startTrimming = trimmingData.start + Math.floor(parseInt(startTrimVal));
+             }
+             if (endTrimVal) {
+-                endTrimming = Math.min(trimmingData.start + Math.floor(parseInt(endTrimVal)), videoDuration);
++                endTrimming = Math.min(
++                    trimmingData.start + Math.floor(parseInt(endTrimVal)),
++                    videoDuration,
++                );
+             }
+         }
+         if (startTrimming < endTrimming && endTrimming > 0 && startTrimming >= 0) {
+             trimmingData = {
+                 start: startTrimming,
+                 end: endTrimming,
+-                enabled: true
++                enabled: true,
+             };
+         }
+-        paella.log.debug(`Setting trim to ${JSON.stringify(trimmingData)}`, 'engage-paella-player');
++        paella.log.debug(
++            `Setting trim to ${JSON.stringify(trimmingData)}`,
++            'opencast-engage-paella-player',
++        );
+         await setTrimming(paella, trimmingData);
+     }
+ }
+ 
+-
+ async function applyInitialSeekFromQueryParams(paella: Paella): Promise<void> {
+     // Check time param in URL and seek:  ?time=1m2s
+     const timeString = getHashParameter('time') ?? getUrlParameter('time');
+     // Check t param, which is seek time in seconds, to be passed as a query or hash: #t=12002
+     const timeStringInSecs = getHashParameter('t') ?? getUrlParameter('t');
+ 
+-    if ((timeString != null) || (timeStringInSecs != null)) {
++    if (timeString != null || timeStringInSecs != null) {
+         let totalTime = 0;
+         if (timeString) {
+             totalTime = humanTimeToSeconds(timeString);
+-        }
+-        else if (timeStringInSecs) {
++        } else if (timeStringInSecs) {
+             totalTime = Math.floor(parseInt(timeStringInSecs));
+         }
+-        paella.log.debug(`Setting initial seek to '${totalTime}' seconds`, 'engage-paella-player');
++        paella.log.debug(
++            `Setting initial seek to '${totalTime}' seconds`,
++            'opencast-engage-paella-player',
++        );
+         await paella.setCurrentTime(totalTime);
+     }
+ }
+@@ -118,8 +126,11 @@ async function applyCaptionsFromQueryParams(paella: Paella): Promise<void> {
+         }
+         const captionSelected = paella.captions[captionsIndex];
+         if (captionSelected) {
+-            paella.log.info(`Enabling captions: ${captionSelected?.label} (${captionSelected?.language})`, 'engage-paella-player');
+-            paella.captionsCanvas.enableCaptions({ index: captionsIndex });
++            paella.log.info(
++                `Enabling captions: ${captionSelected?.label} (${captionSelected?.language})`,
++                'opencast-engage-paella-player',
++            );
++            paella.captionsCanvas?.enableCaptions({ index: captionsIndex });
+         }
+     }
+ }
+@@ -128,8 +139,8 @@ async function applyCaptionsFromQueryParams(paella: Paella): Promise<void> {
+  * Applies query parameters from the URL to configure the Paella player.
+  * Handles trimming, seek time, and captions settings.
+  */
+-export async function applyQueryParams(paella: Paella): Promise<void> {    
++export async function applyQueryParams(paella: Paella): Promise<void> {
+     await applyTrimmingFromQueryParams(paella);
+-    await applyInitialSeekFromQueryParams(paella);    
+-    await applyCaptionsFromQueryParams(paella);    
+-};
++    await applyInitialSeekFromQueryParams(paella);
++    await applyCaptionsFromQueryParams(paella);
++}
+\ No newline at end of file
+diff --git a/modules/engage-paella-player-8/src/watch.ts b/modules/engage-paella-player-8/src/watch.ts
+index 282358f88ed..a79fb1fa38a 100644
+--- a/modules/engage-paella-player-8/src/watch.ts
++++ b/modules/engage-paella-player-8/src/watch.ts
+@@ -23,7 +23,7 @@ import '@asicupv/paella-zoom-plugin/paella-zoom-plugin.css';
+ // import '@asicupv/paella-webgl-plugins/paella-webgl-plugins.css';
+ // import '@asicupv/paella-video-plugins/paella-video-plugins.css';
+ import '@asicupv/paella-extra-plugins/paella-extra-plugins.css';
+-import '@asicupv/paella-ai-plugins/paella-ai-plugins.css';
++// import '@asicupv/paella-ai-plugins/paella-ai-plugins.css';
+ import '@asicupv/paella-opencast-core/paella-opencast-core.css';
+ import defaultDictionaries from './i18n/all';
+ 

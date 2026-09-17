@@ -1,0 +1,50 @@
+schema_version: 1
+id: 2026-09-17-org-opencastproject-opencast-engage-paella-player-7-xss
+title: org.opencastproject:opencast-engage-paella-player-7 Cross-site scripting
+date: '2026-09-17'
+status: published
+maturity: proof-of-concept
+target:
+  product: org.opencastproject:opencast-engage-paella-player-7
+  vendor: org.opencastproject:opencast-engage-paella-player-7
+  ecosystem: Maven
+  package: org.opencastproject:opencast-engage-paella-player-7
+  purl: pkg:maven/org.opencastproject%3Aopencast-engage-paella-player-7@19.7
+  versions:
+    range: <19.7
+    fixed: '19.7'
+    introduced: null
+    vulnerable_validated: '18.5'
+classification:
+  tags:
+  - xss
+  cwe:
+  - CWE-79
+  cvss:
+    score: 8.7
+    version: '3.1'
+    vector: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:N
+  epss:
+    score: 0.00559
+    percentile: 0.4434
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-77615
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: Poc.java
+  language: java
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-77615
+- https://github.com/opencast/opencast/commit/701682c635f668228c3e8fb7b4564b3294788e40
