@@ -1,0 +1,12 @@
+diff --git a/lmdeploy/version.py b/lmdeploy/version.py
+index f960d51c14..1adff220c0 100644
+--- a/lmdeploy/version.py
++++ b/lmdeploy/version.py
+@@ -1,6 +1,6 @@
+ # Copyright (c) OpenMMLab. All rights reserved.
+ 
+-__version__ = '0.15.0'
++__version__ = '0.16.0'
+ short_version = __version__
+ 
+ 
