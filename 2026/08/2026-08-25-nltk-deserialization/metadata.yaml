@@ -1,0 +1,37 @@
+# schema_version: 1
+schema_version: 1
+id: 2026-08-25-nltk-deserialization
+title: NLTK Unsafe deserialization
+date: '2026-08-25'
+status: published
+target:
+  product: NLTK
+  vendor: NLTK
+  versions:
+  - <3.10.0
+  component: PyPI
+classification:
+  tags:
+  - deserialization
+  - differential-poc
+  cwe: CWE-502
+  cvss:
+    version: '3.1'
+    score: 9.6
+    vector: null
+  epss:
+    score: 0.00292
+    percentile: 0.2197
+identifiers:
+  cve: CVE-2026-78683
+  ghsa: null
+  internal: null
+artifacts:
+  poc: poc.py
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-78683
+- https://github.com/nltk/nltk/commit/bd49f9011d7dc8c6a36b3c4ae71f04060c9b3fb9
