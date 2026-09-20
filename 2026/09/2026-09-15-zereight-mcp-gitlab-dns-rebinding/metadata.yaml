@@ -1,33 +1,45 @@
 # schema_version: 1
 schema_version: 1
-id: 2026-09-15-zereight-mcp-gitlab-rce
-title: '@zereight/mcp-gitlab code execution'
+id: 2026-09-15-zereight-mcp-gitlab-dns-rebinding
+title: '@zereight/mcp-gitlab DNS rebinding / missing host allowlist'
 date: '2026-09-15'
 status: published
+maturity: differential-poc
 target:
   product: '@zereight/mcp-gitlab'
   vendor: '@zereight/mcp-gitlab'
+  ecosystem: npm
+  package: '@zereight/mcp-gitlab'
+  purl: pkg:npm/%40zereight/mcp-gitlab@2.1.30
   versions:
-  - <2.1.30
-  component: npm
+    range: <2.1.30
+    fixed: 2.1.30
+    introduced: null
+    vulnerable_validated: null
 classification:
   tags:
-  - rce
+  - dns-rebinding
   - differential-poc
-  cwe: CWE-350
+  cwe:
+  - CWE-350
   cvss:
-    version: '3.1'
     score: 9.6
-    vector: null
   epss:
     score: 0.00322
     percentile: 0.255
+    as_of: '2026-09-20'
 identifiers:
   cve: CVE-2026-61568
   ghsa: null
+  kev: false
   internal: null
+oracle:
+  type: differential-canary
+  signal: canary marker on stdout only on the vulnerable build; exit code is NOT the
+    signal (both builds exit 0)
 artifacts:
-  poc: poc.py
+  poc: poc.js
+  language: javascript
   supporting:
   - artifacts/vuln-output.txt
   - artifacts/patched-output.txt

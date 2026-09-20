@@ -25,6 +25,10 @@ build (`scripts/build_index.py`, run by the `Build index` Action) rejects unknow
 - `open-redirect`
 - `path-traversal`
 - `injection`
+- `code-injection`
+- `dns-rebinding`
+- `csrf`
+- `lfi`
 - `xss`
 - `sqli`
 - `prototype-pollution`

@@ -4,30 +4,42 @@ id: 2026-08-25-nltk-deserialization
 title: NLTK Unsafe deserialization
 date: '2026-08-25'
 status: published
+maturity: differential-poc
 target:
   product: NLTK
   vendor: NLTK
+  ecosystem: PyPI
+  package: nltk
+  purl: pkg:pypi/nltk@3.10.0
   versions:
-  - <3.10.0
-  component: PyPI
+    range: <3.10.0
+    fixed: 3.10.0
+    introduced: null
+    vulnerable_validated: 3.9.4
 classification:
   tags:
   - deserialization
   - differential-poc
-  cwe: CWE-502
+  cwe:
+  - CWE-502
   cvss:
-    version: '3.1'
     score: 9.6
-    vector: null
   epss:
     score: 0.00292
     percentile: 0.2197
+    as_of: '2026-09-20'
 identifiers:
   cve: CVE-2026-78683
   ghsa: null
+  kev: false
   internal: null
+oracle:
+  type: differential-canary
+  signal: canary marker on stdout only on the vulnerable build; exit code is NOT the
+    signal (both builds exit 0)
 artifacts:
   poc: poc.py
+  language: python
   supporting:
   - artifacts/vuln-output.txt
   - artifacts/patched-output.txt
