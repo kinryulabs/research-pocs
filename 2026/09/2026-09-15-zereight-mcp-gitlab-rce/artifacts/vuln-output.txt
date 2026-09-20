@@ -1,0 +1,18 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_65aa603233ace1d0f54cfc49_OK
+
+STDERR:
+Tool "get_branch" is defined in multiple toolsets: "merge_requests" and "branches"
+Tool "list_branches" is defined in multiple toolsets: "merge_requests" and "branches"
+[32mINFO[39m [03:28:52.456] (9): [36mRemote authorization enabled: tokens will be read from HTTP headers[39m
+[32mINFO[39m [03:28:52.457] (9): [36mConfiguration validation passed[39m
+[32mINFO[39m [03:28:52.470] (9): [36mInitializing server with transport mode[39m
+    [35mmode[39m: "streamable-http"
+[33mWARN[39m [03:28:52.471] (9): [36mStarting GitLab MCP Server with Streamable HTTP transport[39m
+[32mINFO[39m [03:28:52.477] (9): [36mConfigured GitLab API URLs: https://gitlab.example.com/api/v4[39m
+[32mINFO[39m [03:28:52.477] (9): [36mDefault GitLab API URL: https://gitlab.example.com/api/v4[39m
+[32mINFO[39m [03:28:52.479] (9): [36mGitLab MCP Server running with Streamable HTTP transport[39m
+[32mINFO[39m [03:28:52.479] (9): [36m[32mEndpoint: http://127.0.0.1:39872/mcp[0m[39m
+[33mWARN[39m [03:28:52.615] (9): [36mStreamable HTTP session initialized: 7a7ccb03-0143-4041-bd57-d99a54e1ed33[39m

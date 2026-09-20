@@ -1,0 +1,37 @@
+# schema_version: 1
+schema_version: 1
+id: 2026-09-15-zereight-mcp-gitlab-rce
+title: '@zereight/mcp-gitlab code execution'
+date: '2026-09-15'
+status: published
+target:
+  product: '@zereight/mcp-gitlab'
+  vendor: '@zereight/mcp-gitlab'
+  versions:
+  - <2.1.30
+  component: npm
+classification:
+  tags:
+  - rce
+  - differential-poc
+  cwe: CWE-350
+  cvss:
+    version: '3.1'
+    score: 9.6
+    vector: null
+  epss:
+    score: 0.00322
+    percentile: 0.255
+identifiers:
+  cve: CVE-2026-61568
+  ghsa: null
+  internal: null
+artifacts:
+  poc: poc.py
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-61568
+- https://github.com/zereight/gitlab-mcp/commit/cff3ebeec272d7cc609d9b3cab57f52cb15fae96
