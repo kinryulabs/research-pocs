@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-22 published:
+23 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-22 | [mcp-atlassian Missing authorization](2026/09/2026-09-22-mcp-atlassian-authz/) | mcp-atlassian | `authz` | CVE-2026-77244 | published |
 | 2026-09-18 | [lmdeploy Unsafe deserialization](2026/09/2026-09-18-lmdeploy-deserialization/) | lmdeploy | `deserialization` | CVE-2025-66455 | published |
 | 2026-09-18 | [lmdeploy Uncontrolled resource consumption](2026/09/2026-09-18-lmdeploy-dos/) | lmdeploy | `dos` | CVE-2026-33625 | published |
 | 2026-09-17 | [@vendure/core Improper authentication](2026/09/2026-09-17-vendure-core-authn/) | @vendure/core | `authn` | CVE-2026-63472 | published |
