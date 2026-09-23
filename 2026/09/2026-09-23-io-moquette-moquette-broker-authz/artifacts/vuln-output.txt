@@ -1,0 +1,8 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_807ed639fc120a2bef830bbf_OK
+
+STDERR:
+ls: /usr/bin/mvn
+[poc] legitimate=true crossTenantRead=true

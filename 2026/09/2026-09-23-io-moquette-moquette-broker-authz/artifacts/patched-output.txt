@@ -1,0 +1,17 @@
+exit_code=1 timed_out=False oracle_hit=False
+detail: no canary
+STDOUT:
+[ERROR] Failed to execute goal on project poc: Could not resolve dependencies for project poc:poc:jar:1.0
+[ERROR] dependency: io.moquette:moquette-broker:jar:0.18.1 (compile)
+[ERROR] 	Cannot access central (https://repo.maven.apache.org/maven2) in offline mode and the artifact io.moquette:moquette-broker:jar:0.18.1 has not been downloaded from it before.
+[ERROR] 
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/DependencyResolutionException
+
+STDERR:
+ls: /usr/bin/mvn

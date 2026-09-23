@@ -1,0 +1,110 @@
+diff --git a/broker/src/main/java/io/moquette/broker/security/AuthorizationsCollector.java b/broker/src/main/java/io/moquette/broker/security/AuthorizationsCollector.java
+index 1bf9e4359..915c08872 100644
+--- a/broker/src/main/java/io/moquette/broker/security/AuthorizationsCollector.java
++++ b/broker/src/main/java/io/moquette/broker/security/AuthorizationsCollector.java
+@@ -17,6 +17,8 @@
+ package io.moquette.broker.security;
+ 
+ import io.moquette.broker.subscriptions.Topic;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ 
+ import java.text.ParseException;
+ import java.util.*;
+@@ -29,6 +31,8 @@
+  */
+ class AuthorizationsCollector implements IAuthorizatorPolicy {
+ 
++    private static final Logger LOG = LoggerFactory.getLogger(AuthorizationsCollector.class);
++
+     private List<Authorization> m_globalAuthorizations = new ArrayList<>();
+     private List<Authorization> m_patternAuthorizations = new ArrayList<>();
+     private Map<String, List<Authorization>> m_userAuthorizations = new HashMap<>();
+@@ -118,12 +122,24 @@ private boolean canDoOperation(Topic topic, Authorization.Permission permission,
+             return true;
+         }
+ 
++        // A pattern rule (e.g. "pattern read sensor/%c/#") is substituted with the client id / username
++        // and the result is used as the FILTER side of topic.match(). An identity carrying the MQTT
++        // wildcards '+' or '#' can't be safely substituted: it broadens the filter to topics the operator
++        // never intended (client id "+" turns "sensor/%c/#" into "sensor/+/#", granting cross-tenant
++        // access), and a "#" identity yields an invalid filter that threw an NPE in Topic.match(). Fail
++        // closed for such identities: skip the pattern branch and warn.
+         if (isNotEmpty(client) || isNotEmpty(username)) {
+-            for (Authorization auth : m_patternAuthorizations) {
+-                Topic substitutedTopic = new Topic(auth.topic.toString().replace("%c", client).replace("%u", username));
+-                if (auth.grant(permission)) {
+-                    if (topic.match(substitutedTopic)) {
+-                        return true;
++            if (hasTopicWildcard(client) || hasTopicWildcard(username)) {
++                LOG.warn("Skipping pattern ACL matching: the client id or username contains MQTT topic " +
++                    "wildcards ('+' or '#') and can't be safely substituted into a pattern filter " +
++                    "(client: {}, username: {})", client, username);
++            } else {
++                for (Authorization auth : m_patternAuthorizations) {
++                    Topic substitutedTopic = new Topic(auth.topic.toString().replace("%c", client).replace("%u", username));
++                    if (auth.grant(permission)) {
++                        if (topic.match(substitutedTopic)) {
++                            return true;
++                        }
+                     }
+                 }
+             }
+@@ -155,6 +171,12 @@ private boolean isNotEmpty(String client) {
+         return client != null && !client.isEmpty();
+     }
+ 
++    // True if the identity contains an MQTT topic wildcard ('+' or '#'), which must never be substituted
++    // into a pattern ACL rule that is subsequently wildcard-matched.
++    private static boolean hasTopicWildcard(String identity) {
++        return identity != null && (identity.indexOf('+') >= 0 || identity.indexOf('#') >= 0);
++    }
++
+     public boolean isEmpty() {
+         return m_globalAuthorizations.isEmpty();
+     }
+diff --git a/broker/src/test/java/io/moquette/broker/security/AuthorizationsCollectorTest.java b/broker/src/test/java/io/moquette/broker/security/AuthorizationsCollectorTest.java
+index ede9a4e45..bab148c57 100644
+--- a/broker/src/test/java/io/moquette/broker/security/AuthorizationsCollectorTest.java
++++ b/broker/src/test/java/io/moquette/broker/security/AuthorizationsCollectorTest.java
+@@ -152,4 +152,40 @@ public void testPatternClientAndUserLineACL() throws ParseException {
+         // Verify
+         assertTrue(authorizator.canRead(new Topic("/weather/italy/anemometer1"), "italy", "anemometer1"));
+     }
++
++    @Test
++    public void givenPatternACLWhichAcceptsClientIDPlaceholderWhenProvidedClientIDContainsWildcardThenMustNotBeMatched() throws ParseException {
++        // Per-tenant isolation: each client may only touch /weather/italy/<its-clientId>.
++        authorizator.parse("pattern read /weather/italy/%c");
++        authorizator.parse("pattern write /weather/italy/%c");
++
++        // Control: a legitimate client reaches only its own topic.
++        assertTrue(authorizator.canRead(new Topic("/weather/italy/anemometer1"), "", "anemometer1"));
++
++        // A client that connects with a wildcard client id must NOT read/write another client's topic:
++        // '+' would substitute the rule to /weather/italy/+ and '#' to /weather/italy/#.
++        assertFalse(authorizator.canRead(new Topic("/weather/italy/victim"), "", "+"));
++        assertFalse(authorizator.canRead(new Topic("/weather/italy/victim"), "", "#"));
++        assertFalse(authorizator.canWrite(new Topic("/weather/italy/victim"), "", "+"));
++        assertFalse(authorizator.canWrite(new Topic("/weather/italy/victim"), "", "#"));
++    }
++
++    @Test
++    public void givenPatternACLWhichAcceptsUsernamePlaceholderWhenProvidedUsernameContainsWildcardThenMustNotBeMatched() throws ParseException {
++        authorizator.parse("pattern read /weather/%u/data");
++        // Control.
++        assertTrue(authorizator.canRead(new Topic("/weather/italy/data"), "italy", ""));
++        // A wildcard username must not broaden the grant to another tenant's data.
++        assertFalse(authorizator.canRead(new Topic("/weather/victim/data"), "+", ""));
++    }
++
++    @Test
++    public void givenPatternACLWhichAcceptsClientIDPlaceholderWhenProvidedClientIDContainsMultilevelWildcardThenDoesntThrowError() throws ParseException {
++        // A '#' client id substituted into /weather/italy/%c/# yields the invalid filter
++        // /weather/italy/#/#, which previously produced a Topic with no tokens and threw a
++        // NullPointerException in Topic.match(). It must now be handled cleanly (denied, no throw).
++        authorizator.parse("pattern read /weather/italy/%c/#");
++        assertDoesNotThrow(() -> authorizator.canRead(new Topic("/weather/italy/victim/inner"), "", "#"));
++        assertFalse(authorizator.canRead(new Topic("/weather/italy/victim/inner"), "", "#"));
++    }
+ }
