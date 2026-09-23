@@ -1,0 +1,1306 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index 5bf15ef11..ef0602f3a 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -65,6 +65,7 @@ markers = [
+     "integration: mark test as requiring integration with real services",
+     "dc_e2e: mark test as requiring DC instances (Jira DC + Confluence DC)",
+     "cloud_e2e: mark test as requiring Cloud instances (Jira Cloud + Confluence Cloud)",
++    "security_regression: SP5 security regression test (xfail-strict until the Phase B root fix lands; see plan)",
+ ]
+ 
+ [tool.ruff]
+diff --git a/src/mcp_atlassian/confluence/attachments.py b/src/mcp_atlassian/confluence/attachments.py
+index 4d585c59d..82781ce29 100644
+--- a/src/mcp_atlassian/confluence/attachments.py
++++ b/src/mcp_atlassian/confluence/attachments.py
+@@ -149,9 +149,10 @@ def upload_attachment(
+             return {"success": False, "error": "No file path provided"}
+ 
+         try:
+-            # Convert to absolute path if relative
+-            if not os.path.isabs(file_path):
+-                file_path = os.path.abspath(file_path)
++            # Confine the upload source to the workspace before it is read: reject
++            # traversal/absolute paths that escape CWD (arbitrary file read /
++            # exfiltration via a caller-supplied file_path).
++            file_path = str(validate_safe_path(file_path))
+ 
+             # Check if file exists
+             if not os.path.exists(file_path):
+diff --git a/src/mcp_atlassian/confluence/client.py b/src/mcp_atlassian/confluence/client.py
+index 97b33dad9..3880b64e5 100644
+--- a/src/mcp_atlassian/confluence/client.py
++++ b/src/mcp_atlassian/confluence/client.py
+@@ -17,6 +17,8 @@
+ from ..utils.logging import get_masked_session_headers, log_config_param, mask_sensitive
+ from ..utils.oauth import configure_oauth_session
+ from ..utils.ssl import configure_ssl_verification
++from ..utils.ssrf_adapter import mount_ssrf_pinning
++from ..utils.urls import make_ssrf_redirect_hook
+ from ..utils.user_agent import get_default_user_agent
+ from .config import ConfluenceConfig
+ 
+@@ -130,8 +132,18 @@ def __init__(self, config: ConfluenceConfig | None = None) -> None:
+             client_key_password=self.config.client_key_password,
+         )
+ 
+-        # Apply opt-in HTTP hardening after SSL setup so SSLIgnoreAdapter, if
+-        # mounted, also picks up the configured behavior.
++        # Validate redirects for SSRF on every outbound call from this session
++        # (covers direct _session.get() paths and global/stdio fetchers, not just
++        # the per-user HTTP path).
++        self.confluence._session.hooks["response"].append(make_ssrf_redirect_hook())
++        # Pin DNS resolution against rebinding: resolve+validate once and connect
++        # to that address, closing the validate→reconnect TOCTOU. Preserves TLS SNI.
++        mount_ssrf_pinning(self.confluence._session)
++
++        # Apply opt-in HTTP hardening after SSL setup and after the pinning
++        # adapter is mounted: these wrappers patch send() in place on whatever
++        # adapters are mounted now, so mounting the pinning adapter later would
++        # silently drop them.
+         configure_retry(self.confluence._session, service="Confluence")
+         configure_concurrency(self.confluence._session, service="Confluence")
+         configure_rate_limit(self.confluence._session, service="Confluence")
+diff --git a/src/mcp_atlassian/confluence/search.py b/src/mcp_atlassian/confluence/search.py
+index 73a23b4de..9dbc8283b 100644
+--- a/src/mcp_atlassian/confluence/search.py
++++ b/src/mcp_atlassian/confluence/search.py
+@@ -23,6 +23,29 @@
+ class SearchMixin(ConfluenceClient):
+     """Mixin for Confluence search operations."""
+ 
++    def _and_spaces_filter(self, cql: str, filter_to_use: str) -> str:
++        """AND a single comma-separated spaces allowlist into ``cql``.
++
++        Always ANDs the allowlist, even when the caller's CQL already names a
++        space, so a caller-supplied ``space = X`` cannot escape it.
++        """
++        spaces = [s.strip() for s in filter_to_use.split(",")]
++        space_query = " OR ".join(
++            [f"space = {quote_cql_identifier_if_needed(space)}" for space in spaces]
++        )
++        if not cql:
++            return space_query
++        # Extract a trailing ORDER BY so the AND does not produce invalid CQL.
++        order_match = re.search(r"\s+(ORDER\s+BY\s+.*)$", cql, re.IGNORECASE)
++        if order_match:
++            order_clause = order_match.group(1)
++            cql_without_order = cql[: order_match.start()]
++            cql = f"({cql_without_order}) AND ({space_query}) {order_clause}"
++        else:
++            cql = f"({cql}) AND ({space_query})"
++        logger.info(f"Applied spaces filter to query: {cql}")
++        return cql
++
+     @handle_atlassian_api_errors("Confluence API")
+     def search(
+         self, cql: str, limit: int = 10, spaces_filter: str | None = None
+@@ -33,8 +56,9 @@ def search(
+         Args:
+             cql: Confluence Query Language string
+             limit: Maximum number of results to return
+-            spaces_filter: Optional comma-separated list of space keys to filter by,
+-                overrides config
++            spaces_filter: Optional comma-separated list of space keys to narrow
++                results within the configured allowlist (ANDed with config,
++                never replaces it)
+ 
+         Returns:
+             List of ConfluencePage models containing search results
+@@ -45,27 +69,13 @@ def search(
+         """
+         limit = clamp_limit(limit, context="confluence.search")
+ 
+-        # Use spaces_filter parameter if provided, otherwise fall back to config
+-        filter_to_use = spaces_filter or self.config.spaces_filter
+-
+-        # Apply spaces filter if present
+-        if filter_to_use:
+-            # Split spaces filter by commas and handle possible whitespace
+-            spaces = [s.strip() for s in filter_to_use.split(",")]
+-
+-            # Build the space filter query part using proper quoting for each space key
+-            space_query = " OR ".join(
+-                [f"space = {quote_cql_identifier_if_needed(space)}" for space in spaces]
+-            )
+-
+-            # Add the space filter to existing query with parentheses
+-            if cql and space_query:
+-                if "space = " not in cql:  # Only add if not already filtering by space
+-                    cql = f"({cql}) AND ({space_query})"
+-            else:
+-                cql = space_query
+-
+-            logger.info(f"Applied spaces filter to query: {cql}")
++        # config.spaces_filter is a hard boundary and is always applied; a
++        # caller-supplied spaces_filter may only *narrow* within it (both ANDed),
++        # never replace it — otherwise the tool argument would defeat the
++        # operator's allowlist in shared-credential deployments.
++        for filter_str in (self.config.spaces_filter, spaces_filter):
++            if filter_str:
++                cql = self._and_spaces_filter(cql, filter_str)
+ 
+         # Execute the CQL search query
+         results = self.confluence.cql(cql=cql, limit=limit)
+diff --git a/src/mcp_atlassian/jira/attachments.py b/src/mcp_atlassian/jira/attachments.py
+index 94a256433..2b2334dc9 100644
+--- a/src/mcp_atlassian/jira/attachments.py
++++ b/src/mcp_atlassian/jira/attachments.py
+@@ -42,6 +42,17 @@ def download_attachment(self, url: str, target_path: str) -> bool:
+             # Guard against path traversal (resolves symlinks)
+             validate_safe_path(target_path)
+ 
++            # Do not write into the working-directory root itself: that is where
++            # Python resolves imports first, so a download landing there could
++            # overwrite an importable module and gain code execution (GHSA-6vmq).
++            # Attachments must be saved into a subdirectory.
++            resolved = Path(target_path).resolve()
++            if resolved.parent == Path(os.getcwd()).resolve():
++                logger.error(
++                    f"Refusing to download into the working-directory root: {target_path}"
++                )
++                return False
++
+             logger.info(f"Downloading attachment from {url} to {target_path}")
+ 
+             # Create the directory if it doesn't exist
+@@ -370,9 +381,10 @@ def upload_attachment(self, issue_key: str, file_path: str) -> dict[str, Any]:
+             return {"success": False, "error": "No file path provided"}
+ 
+         try:
+-            # Convert to absolute path if relative
+-            if not os.path.isabs(file_path):
+-                file_path = os.path.abspath(file_path)
++            # Confine the upload source to the workspace before it is read: reject
++            # traversal/absolute paths that escape CWD (arbitrary file read /
++            # exfiltration via a caller-supplied file_path).
++            file_path = str(validate_safe_path(file_path))
+ 
+             # Check if file exists
+             if not os.path.exists(file_path):
+diff --git a/src/mcp_atlassian/jira/client.py b/src/mcp_atlassian/jira/client.py
+index e091ff766..bcb54446f 100644
+--- a/src/mcp_atlassian/jira/client.py
++++ b/src/mcp_atlassian/jira/client.py
+@@ -23,6 +23,8 @@
+ )
+ from mcp_atlassian.utils.oauth import configure_oauth_session
+ from mcp_atlassian.utils.ssl import configure_ssl_verification
++from mcp_atlassian.utils.ssrf_adapter import mount_ssrf_pinning
++from mcp_atlassian.utils.urls import make_ssrf_redirect_hook
+ from mcp_atlassian.utils.user_agent import get_default_user_agent
+ 
+ from ..models.jira.adf import markdown_to_adf
+@@ -143,8 +145,18 @@ def __init__(self, config: JiraConfig | None = None) -> None:
+             client_key_password=self.config.client_key_password,
+         )
+ 
+-        # Apply opt-in HTTP hardening after SSL setup so SSLIgnoreAdapter, if
+-        # mounted, also picks up the configured behavior.
++        # Validate redirects for SSRF on every outbound call from this session
++        # (covers direct _session.get() paths and global/stdio fetchers, not just
++        # the per-user HTTP path).
++        self.jira._session.hooks["response"].append(make_ssrf_redirect_hook())
++        # Pin DNS resolution against rebinding: resolve+validate once and connect
++        # to that address, closing the validate→reconnect TOCTOU. Preserves TLS SNI.
++        mount_ssrf_pinning(self.jira._session)
++
++        # Apply opt-in HTTP hardening after SSL setup and after the pinning
++        # adapter is mounted: these wrappers patch send() in place on whatever
++        # adapters are mounted now, so mounting the pinning adapter later would
++        # silently drop them.
+         configure_retry(self.jira._session, service="Jira")
+         configure_concurrency(self.jira._session, service="Jira")
+         configure_rate_limit(self.jira._session, service="Jira")
+diff --git a/src/mcp_atlassian/jira/search.py b/src/mcp_atlassian/jira/search.py
+index 49d169e4a..ca72b2acc 100644
+--- a/src/mcp_atlassian/jira/search.py
++++ b/src/mcp_atlassian/jira/search.py
+@@ -21,6 +21,57 @@
+ class SearchMixin(JiraClient, IssueOperationsProto):
+     """Mixin for Jira search operations."""
+ 
++    def _apply_projects_filter(
++        self, jql: str, projects_filter: str | None = None
++    ) -> str:
++        """Constrain a JQL query to the allowed projects (JIRA_PROJECTS_FILTER).
++
++        Every JQL-issuing path routes through here so none can escape the project
++        allowlist. ``config.projects_filter`` is a hard boundary and is always
++        applied; a caller-supplied ``projects_filter`` may only *narrow* within it
++        (both are ANDed), never replace it — otherwise the tool argument would
++        defeat the operator's allowlist in shared-credential deployments.
++        """
++        for filter_str in (self.config.projects_filter, projects_filter):
++            if filter_str:
++                jql = self._and_projects_filter(jql, filter_str)
++        return jql
++
++    def _and_projects_filter(self, jql: str, filter_to_use: str) -> str:
++        """AND a single comma-separated project allowlist into ``jql``."""
++        # Split by commas, and escape backslashes before double-quotes to prevent
++        # JQL-injection bypass of the quoting below.
++        projects = [p.strip() for p in filter_to_use.split(",")]
++        projects = [p.replace("\\", "\\\\").replace('"', '\\"') for p in projects]
++
++        if len(projects) == 1:
++            quoted = quote_jql_identifier_if_needed(projects[0])
++            project_query = f"project = {quoted}"
++        else:
++            quoted_projects = [quote_jql_identifier_if_needed(p) for p in projects]
++            projects_list = ", ".join(quoted_projects)
++            project_query = f"project IN ({projects_list})"
++
++        if not jql:
++            jql = project_query
++        elif jql.strip().upper().startswith("ORDER BY"):
++            jql = f"{project_query} {jql}"
++        else:
++            # Always AND the allowlist, even when the caller's query already names a
++            # project: a caller-supplied `project = X` must not be able to escape the
++            # configured allowlist (out-of-allowlist queries then return empty).
++            # Extract a trailing ORDER BY so the AND does not produce invalid JQL.
++            order_match = re.search(r"\s+(ORDER\s+BY\s+.*)$", jql, re.IGNORECASE)
++            if order_match:
++                order_clause = order_match.group(1)
++                jql_without_order = jql[: order_match.start()]
++                jql = f"({jql_without_order}) AND {project_query} {order_clause}"
++            else:
++                jql = f"({jql}) AND {project_query}"
++
++        logger.info(f"Applied projects filter to query: {jql}")
++        return jql
++
+     @handle_auth_errors("Jira API")
+     def search_issues(
+         self,
+@@ -43,7 +94,9 @@ def search_issues(
+                   start from the first page.
+             limit: Maximum issues to return
+             expand: Optional items to expand (comma-separated)
+-            projects_filter: Optional comma-separated list of project keys to filter by, overrides config
++            projects_filter: Optional comma-separated list of project keys to narrow
++                results within the configured allowlist (ANDed with config, never
++                replaces it)
+             page_token: Optional pagination token from a previous search result.
+                   Cloud only — Server/DC uses start for pagination.
+ 
+@@ -60,56 +113,8 @@ def search_issues(
+             # Sanitize JQL reserved words in project key values
+             jql = sanitize_jql_reserved_words(jql)
+ 
+-            # Use projects_filter parameter if provided, otherwise fall back to config
+-            filter_to_use = projects_filter or self.config.projects_filter
+-
+-            # Apply projects filter if present
+-            if filter_to_use:
+-                # Split projects filter by commas and handle possible whitespace
+-                projects = [p.strip() for p in filter_to_use.split(",")]
+-
+-                # Build the project filter query part
+-                # Sanitize project names to prevent JQL injection
+-                # Escape backslashes before double-quotes to prevent bypass
+-                projects = [
+-                    p.replace("\\", "\\\\").replace('"', '\\"') for p in projects
+-                ]
+-
+-                if len(projects) == 1:
+-                    quoted = quote_jql_identifier_if_needed(projects[0])
+-                    project_query = f"project = {quoted}"
+-                else:
+-                    quoted_projects = [
+-                        quote_jql_identifier_if_needed(p) for p in projects
+-                    ]
+-                    projects_list = ", ".join(quoted_projects)
+-                    project_query = f"project IN ({projects_list})"
+-
+-                # Add the project filter to existing query
+-                if not jql:
+-                    # Empty JQL - just use project filter
+-                    jql = project_query
+-                elif jql.strip().upper().startswith("ORDER BY"):
+-                    # JQL starts with ORDER BY - prepend project filter
+-                    jql = f"{project_query} {jql}"
+-                elif (
+-                    "project = " not in jql.lower() and "project in" not in jql.lower()
+-                ):
+-                    # Only add if not already filtering by project
+-                    # Extract ORDER BY clause if present to avoid invalid JQL
+-                    order_match = re.search(
+-                        r"\s+(ORDER\s+BY\s+.*)$", jql, re.IGNORECASE
+-                    )
+-                    if order_match:
+-                        order_clause = order_match.group(1)
+-                        jql_without_order = jql[: order_match.start()]
+-                        jql = (
+-                            f"({jql_without_order}) AND {project_query} {order_clause}"
+-                        )
+-                    else:
+-                        jql = f"({jql}) AND {project_query}"
+-
+-                logger.info(f"Applied projects filter to query: {jql}")
++            # Constrain to the allowed projects (JIRA_PROJECTS_FILTER)
++            jql = self._apply_projects_filter(jql, projects_filter)
+ 
+             # Convert fields to proper format if it's a list/tuple/set
+             fields_param: str | None
+@@ -240,6 +245,9 @@ def get_board_issues(
+             # Sanitize JQL reserved words in project key values
+             jql = sanitize_jql_reserved_words(jql) or jql
+ 
++            # Constrain board issues to the allowed projects (JIRA_PROJECTS_FILTER)
++            jql = self._apply_projects_filter(jql)
++
+             # Determine fields_param
+             fields_param = fields
+             if fields_param is None:
+@@ -298,11 +306,20 @@ def get_sprint_issues(
+         Raises:
+             Exception: If there is an error getting sprint issues
+         """
++        # sprint_id is interpolated into JQL; require an integer to prevent
++        # JQL injection via a crafted non-numeric value.
++        try:
++            sprint_id_int = int(str(sprint_id).strip())
++        except (TypeError, ValueError) as e:
++            raise ValueError(
++                f"Invalid sprint_id {sprint_id!r}: must be an integer"
++            ) from e
++
+         try:
+             limit = clamp_limit(limit, context="jira.get_sprint_issues")
+ 
+             # Use JQL search to get sprint issues with proper fields filtering
+-            jql = f"sprint = {sprint_id}"
++            jql = f"sprint = {sprint_id_int}"
+             return self.search_issues(
+                 jql=jql,
+                 fields=fields,
+diff --git a/src/mcp_atlassian/servers/confluence.py b/src/mcp_atlassian/servers/confluence.py
+index 3e78b79d1..ff1c3e8f6 100644
+--- a/src/mcp_atlassian/servers/confluence.py
++++ b/src/mcp_atlassian/servers/confluence.py
+@@ -20,6 +20,7 @@
+ from mcp_atlassian.utils.decorators import (
+     check_write_access,
+ )
++from mcp_atlassian.utils.io import validate_safe_path
+ from mcp_atlassian.utils.media import (
+     ATTACHMENT_MAX_BYTES,
+     fetch_and_encode_attachment,
+@@ -124,15 +125,17 @@ def _resolve_page_content(content: str | None, content_file: str | None) -> str:
+ 
+     Args:
+         content: Inline page body (any supported content_format).
+-        content_file: Absolute or relative filesystem path to read the body from.
+-            Read as UTF-8.
++        content_file: Filesystem path to read the body from (UTF-8). Must
++            resolve inside the current working directory (workspace), the same
++            confinement contract as attachment paths.
+ 
+     Returns:
+         The resolved page body as a string.
+ 
+     Raises:
+-        ValueError: If neither or both arguments are supplied, or if the file does
+-            not exist / is not a regular file.
++        ValueError: If neither or both arguments are supplied, if the file does
++            not exist / is not a regular file, or if the path escapes the
++            workspace.
+         OSError: If the file exists but cannot be read.
+     """
+     has_content = content is not None
+@@ -146,7 +149,10 @@ def _resolve_page_content(content: str | None, content_file: str | None) -> str:
+     if content_file is None or content_file == "":
+         raise ValueError("One of 'content' or 'content_file' must be provided.")
+ 
+-    path = Path(content_file).expanduser()
++    # Confine the read to the workspace, same contract as attachment paths — an
++    # unconfined caller-supplied path is an arbitrary-file-read primitive (the
++    # file body is echoed back through the created/updated page).
++    path = validate_safe_path(Path(content_file).expanduser())
+     if not path.is_file():
+         msg = f"content_file does not exist or is not a regular file: {path}"
+         raise ValueError(msg)
+diff --git a/src/mcp_atlassian/servers/dependencies.py b/src/mcp_atlassian/servers/dependencies.py
+index 9f945e9c1..8c32a0ebe 100644
+--- a/src/mcp_atlassian/servers/dependencies.py
++++ b/src/mcp_atlassian/servers/dependencies.py
+@@ -17,6 +17,7 @@
+ from mcp_atlassian.confluence import ConfluenceConfig, ConfluenceFetcher
+ from mcp_atlassian.jira import JiraConfig, JiraFetcher
+ from mcp_atlassian.servers.context import MainAppContext
++from mcp_atlassian.utils.env import is_env_truthy
+ from mcp_atlassian.utils.oauth import OAuthConfig
+ from mcp_atlassian.utils.urls import validate_url_for_ssrf
+ 
+@@ -508,8 +509,10 @@ async def _get_fetcher(ctx: Context, spec: _ServiceSpec) -> Any:
+     """
+     fn_name = f"get_{spec.name.lower()}_fetcher"
+     logger.debug(f"{fn_name}: ENTERED. Context ID: {id(ctx)}")
++    in_http_context = False
+     try:
+         request: Request = get_http_request()
++        in_http_context = True
+         logger.debug(
+             f"{fn_name}: In HTTP request context. "
+             f"Request URL: {request.url}. "
+@@ -592,6 +595,7 @@ async def _get_fetcher(ctx: Context, spec: _ServiceSpec) -> Any:
+                 user_config,
+                 "basic",
+                 user_email=user_email,
++                attach_ssrf_hook=True,
+             )
+ 
+         # --- Branch 3: OAuth / PAT with token ---
+@@ -641,6 +645,7 @@ async def _get_fetcher(ctx: Context, spec: _ServiceSpec) -> Any:
+                 user_config,
+                 "oauth_pat",
+                 user_email=user_email,
++                attach_ssrf_hook=True,
+             )
+ 
+         else:
+@@ -663,6 +668,17 @@ async def _get_fetcher(ctx: Context, spec: _ServiceSpec) -> Any:
+         getattr(app_ctx, spec.config_attr, None) if app_ctx else None
+     )
+     if global_config_fallback:
++        # An HTTP request that reaches here has no per-user identity: serving it
++        # with the operator's global credentials lets any unauthenticated caller
++        # transact as the operator. Refuse unless explicitly opted in. Non-HTTP
++        # (stdio, single-user) is unaffected — the operator is the user there.
++        if in_http_context and not is_env_truthy("ALLOW_GLOBAL_CRED_FALLBACK"):
++            raise ValueError(
++                f"{spec.name} client (fetcher) not available: refusing to serve an "
++                "unauthenticated request with the operator's global credentials. "
++                "Provide a user token, or set ALLOW_GLOBAL_CRED_FALLBACK=true to "
++                "allow the global-credential fallback (single-user deployments only)."
++            )
+         logger.debug(
+             f"{fn_name}: Using global {spec.name}Fetcher "
+             "from lifespan_context. "
+diff --git a/src/mcp_atlassian/servers/main.py b/src/mcp_atlassian/servers/main.py
+index 43f70a891..454c982ab 100644
+--- a/src/mcp_atlassian/servers/main.py
++++ b/src/mcp_atlassian/servers/main.py
+@@ -12,6 +12,7 @@
+ from cachetools import TTLCache
+ from fastmcp import FastMCP
+ from fastmcp import settings as fastmcp_settings
++from fastmcp.exceptions import NotFoundError
+ from fastmcp.server.event_store import EventStore
+ from fastmcp.server.http import StarletteWithLifespan
+ from fastmcp.tools import Tool as FastMCPTool
+@@ -209,14 +210,15 @@ def get_streamable_http_path(self) -> str:
+             return self._active_streamable_http_path
+         return self._normalize_http_path(fastmcp_settings.streamable_http_path)
+ 
+-    async def _list_tools_mcp(self) -> list[MCPTool]:
+-        # Filter tools based on enabled_tools, read_only mode, and service configuration from the lifespan context.
++    def _tool_filter_context(self) -> dict[str, Any] | None:
++        """Gather the per-request tool-enablement context (read-only mode, enabled
++        tools/toolsets, service availability) from the lifespan/request context.
++
++        Returns None when the lifespan context is unavailable.
++        """
+         req_context = self._mcp_server.request_context
+         if req_context is None or req_context.lifespan_context is None:
+-            logger.warning(
+-                "Lifespan context not available during _list_tools_mcp call."
+-            )
+-            return []
++            return None
+ 
+         lifespan_ctx_dict = req_context.lifespan_context
+         app_lifespan_state: MainAppContext | None = (
+@@ -246,13 +248,78 @@ async def _list_tools_mcp(self) -> list[MCPTool]:
+             service_headers = getattr(request.state, "atlassian_service_headers", {})
+             if service_headers:
+                 header_based_services = get_available_services(service_headers)
+-                logger.debug(
+-                    f"Header-based service availability: {header_based_services}"
+-                )
+ 
+-        logger.debug(
+-            f"_list_tools_mcp: read_only={read_only}, enabled_tools_filter={enabled_tools_filter}, header_services={header_based_services}"
+-        )
++        return {
++            "read_only": read_only,
++            "enabled_tools_filter": enabled_tools_filter,
++            "enabled_toolsets_filter": enabled_toolsets_filter,
++            "app_lifespan_state": app_lifespan_state,
++            "header_based_services": header_based_services,
++        }
++
++    def _is_tool_authorized(
++        self, registered_name: str, tool_obj: FastMCPTool, ctx: dict[str, Any]
++    ) -> bool:
++        """Authorization boundaries enforced at BOTH listing and call time: the
++        ENABLED_TOOLS allowlist, the enabled toolsets, and read-only mode.
++
++        These are security boundaries — a tool excluded here must not be invocable
++        by name. (Service availability, below, is a listing-only UX filter: an
++        unavailable-service tool simply fails naturally if called.)
++        """
++        tool_tags = tool_obj.tags
++        if not should_include_tool_by_toolset(
++            tool_tags, ctx["enabled_toolsets_filter"]
++        ):
++            return False
++        if not should_include_tool(registered_name, ctx["enabled_tools_filter"]):
++            return False
++        if ctx["read_only"] and "write" in tool_tags:
++            return False
++        return True
++
++    def _is_tool_enabled(
++        self, registered_name: str, tool_obj: FastMCPTool, ctx: dict[str, Any]
++    ) -> bool:
++        """Listing filter: the tool is authorized AND its backing service is
++        configured/available (the latter is a listing-only graceful-hide)."""
++        if not self._is_tool_authorized(registered_name, tool_obj, ctx):
++            return False
++
++        app_lifespan_state = ctx["app_lifespan_state"]
++        header_based_services = ctx["header_based_services"]
++        tool_tags = tool_obj.tags
++
++        is_jira_tool = "jira" in tool_tags
++        is_confluence_tool = "confluence" in tool_tags
++        if app_lifespan_state:
++            jira_available = (
++                app_lifespan_state.full_jira_config is not None
++            ) or header_based_services.get("jira", False)
++            confluence_available = (
++                app_lifespan_state.full_confluence_config is not None
++            ) or header_based_services.get("confluence", False)
++            if is_jira_tool and not jira_available:
++                return False
++            if is_confluence_tool and not confluence_available:
++                return False
++        elif is_jira_tool or is_confluence_tool:
++            if is_jira_tool and not header_based_services.get("jira", False):
++                return False
++            if is_confluence_tool and not header_based_services.get(
++                "confluence", False
++            ):
++                return False
++        return True
++
++    async def _list_tools_mcp(self) -> list[MCPTool]:
++        # Filter tools based on enabled_tools, read_only mode, and service configuration from the lifespan context.
++        ctx = self._tool_filter_context()
++        if ctx is None:
++            logger.warning(
++                "Lifespan context not available during _list_tools_mcp call."
++            )
++            return []
+ 
+         all_tools: dict[str, FastMCPTool] = await self.get_tools()
+         logger.debug(
+@@ -261,64 +328,9 @@ async def _list_tools_mcp(self) -> list[MCPTool]:
+ 
+         filtered_tools: list[MCPTool] = []
+         for registered_name, tool_obj in all_tools.items():
+-            tool_tags = tool_obj.tags
+-
+-            if not should_include_tool_by_toolset(tool_tags, enabled_toolsets_filter):
+-                logger.debug(
+-                    f"Excluding tool '{registered_name}' (toolset not enabled)"
+-                )
++            if not self._is_tool_enabled(registered_name, tool_obj, ctx):
++                logger.debug(f"Excluding tool '{registered_name}' (filtered)")
+                 continue
+-
+-            if not should_include_tool(registered_name, enabled_tools_filter):
+-                logger.debug(f"Excluding tool '{registered_name}' (not enabled)")
+-                continue
+-
+-            if tool_obj and read_only and "write" in tool_tags:
+-                logger.debug(
+-                    f"Excluding tool '{registered_name}' due to read-only mode and 'write' tag"
+-                )
+-                continue
+-
+-            # Exclude Jira/Confluence tools if config is not fully authenticated
+-            is_jira_tool = "jira" in tool_tags
+-            is_confluence_tool = "confluence" in tool_tags
+-            service_configured_and_available = True
+-            if app_lifespan_state:
+-                jira_available = (
+-                    app_lifespan_state.full_jira_config is not None
+-                ) or header_based_services.get("jira", False)
+-                confluence_available = (
+-                    app_lifespan_state.full_confluence_config is not None
+-                ) or header_based_services.get("confluence", False)
+-
+-                if is_jira_tool and not jira_available:
+-                    logger.debug(
+-                        f"Excluding Jira tool '{registered_name}' as Jira configuration/authentication is incomplete and no header-based auth available."
+-                    )
+-                    service_configured_and_available = False
+-                if is_confluence_tool and not confluence_available:
+-                    logger.debug(
+-                        f"Excluding Confluence tool '{registered_name}' as Confluence configuration/authentication is incomplete and no header-based auth available."
+-                    )
+-                    service_configured_and_available = False
+-            elif is_jira_tool or is_confluence_tool:
+-                jira_available = header_based_services.get("jira", False)
+-                confluence_available = header_based_services.get("confluence", False)
+-
+-                if is_jira_tool and not jira_available:
+-                    logger.debug(
+-                        f"Excluding Jira tool '{registered_name}' as no Jira authentication available."
+-                    )
+-                    service_configured_and_available = False
+-                if is_confluence_tool and not confluence_available:
+-                    logger.debug(
+-                        f"Excluding Confluence tool '{registered_name}' as no Confluence authentication available."
+-                    )
+-                    service_configured_and_available = False
+-
+-            if not service_configured_and_available:
+-                continue
+-
+             mcp_tool = tool_obj.to_mcp_tool(name=registered_name)
+             _sanitize_schema_for_compatibility(mcp_tool)
+             filtered_tools.append(mcp_tool)
+@@ -328,6 +340,21 @@ async def _list_tools_mcp(self) -> list[MCPTool]:
+         )
+         return filtered_tools
+ 
++    async def _call_tool_mcp(self, key: str, arguments: dict[str, Any]) -> Any:
++        # Enforce the same enablement filter at call time as at listing time, so a
++        # tool hidden from the listing (read-only mode, not in ENABLED_TOOLS, toolset
++        # disabled, or service unavailable) cannot be invoked directly by name.
++        # Denials look identical to an unknown tool (no exists-but-disabled leak).
++        ctx = self._tool_filter_context()
++        if ctx is not None:
++            all_tools = await self.get_tools()
++            tool_obj = all_tools.get(key)
++            if tool_obj is not None and not self._is_tool_authorized(
++                key, tool_obj, ctx
++            ):
++                raise NotFoundError(f"Unknown tool: {key}")
++        return await super()._call_tool_mcp(key, arguments)
++
+     def http_app(
+         self,
+         path: str | None = None,
+@@ -442,6 +469,28 @@ async def safe_send(message: Message) -> None:
+             await self._send_json_error_response(safe_send, 401, auth_error)
+             return  # Don't call self.app - request is rejected
+ 
++        # Reject unauthenticated MCP requests at the transport boundary: with no
++        # user identity, the downstream handler would fall back to the operator's
++        # global credentials, so any unauthenticated caller would transact as the
++        # operator. Refuse unless explicitly opted in (opt-in global-fallback gate).
++        if (
++            not ignore_header_auth
++            and self.mcp_server_ref
++            and self._should_process_auth(scope_copy)
++            and not scope_copy["state"].get("user_atlassian_auth_type")
++            and not is_env_truthy("ALLOW_GLOBAL_CRED_FALLBACK")
++        ):
++            logger.warning(
++                "UserTokenMiddleware: rejecting unauthenticated MCP request "
++                "(no user identity and ALLOW_GLOBAL_CRED_FALLBACK is off)"
++            )
++            await self._send_json_error_response(
++                safe_send,
++                401,
++                "Authentication required: no Atlassian credentials were provided.",
++            )
++            return  # Don't call self.app - request is rejected
++
+         # Call the next application with modified scope and safe send wrapper
+         await self.app(scope_copy, receive, safe_send)
+ 
+diff --git a/src/mcp_atlassian/utils/oauth.py b/src/mcp_atlassian/utils/oauth.py
+index 010b64265..8c74b618d 100644
+--- a/src/mcp_atlassian/utils/oauth.py
++++ b/src/mcp_atlassian/utils/oauth.py
+@@ -398,9 +398,10 @@ def _save_tokens_to_file(self, token_data: dict | None = None) -> None:
+                         will use the current object attributes.
+         """
+         try:
+-            # Create the directory if it doesn't exist
++            # Create the directory if it doesn't exist (owner-only)
+             token_dir = Path.home() / ".mcp-atlassian"
+             token_dir.mkdir(exist_ok=True)
++            os.chmod(token_dir, 0o700)
+ 
+             # Save the tokens to a file
+             token_path = token_dir / f"oauth-{self.client_id}.json"
+@@ -414,8 +415,12 @@ def _save_tokens_to_file(self, token_data: dict | None = None) -> None:
+                     "base_url": self.base_url,
+                 }
+ 
+-            with open(token_path, "w") as f:
++            # Persisted tokens are secrets: create/truncate owner-only so they are
++            # never group/world-readable, independent of the process umask.
++            fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
++            with os.fdopen(fd, "w") as f:
+                 json.dump(token_data, f)
++            os.chmod(token_path, 0o600)
+ 
+             logger.debug(f"Saved OAuth tokens to file {token_path} (fallback storage)")
+         except Exception as e:
+diff --git a/src/mcp_atlassian/utils/oauth_setup.py b/src/mcp_atlassian/utils/oauth_setup.py
+index a77f0bb87..fbe9b4a35 100644
+--- a/src/mcp_atlassian/utils/oauth_setup.py
++++ b/src/mcp_atlassian/utils/oauth_setup.py
+@@ -17,6 +17,7 @@
+ import urllib.parse
+ import webbrowser
+ from dataclasses import dataclass
++from html import escape as html_escape
+ 
+ from ..utils.oauth import OAuthConfig
+ 
+@@ -85,6 +86,10 @@ def _send_response(self, message: str, status: int = 200) -> None:
+         self.send_header("Content-type", "text/html")
+         self.end_headers()
+ 
++        # Escape the message: it can carry attacker-controlled OAuth callback
++        # text (e.g. the error query param), so raw interpolation is reflected XSS.
++        escaped_message = html_escape(message)
++
+         html = f"""
+         <!DOCTYPE html>
+         <html>
+@@ -122,7 +127,7 @@ def _send_response(self, message: str, status: int = 200) -> None:
+         <body>
+             <h1>Atlassian OAuth Authorization</h1>
+             <div class="message {"success" if status == 200 else "error"}">
+-                <p>{message}</p>
++                <p>{escaped_message}</p>
+             </div>
+             <p>This window will automatically close in <span class="countdown">5</span> seconds...</p>
+             <button onclick="window.close()">Close Window Now</button>
+diff --git a/src/mcp_atlassian/utils/ssl.py b/src/mcp_atlassian/utils/ssl.py
+index 8469fda57..7ef96ac65 100644
+--- a/src/mcp_atlassian/utils/ssl.py
++++ b/src/mcp_atlassian/utils/ssl.py
+@@ -9,6 +9,8 @@
+ from requests.sessions import Session
+ from urllib3.poolmanager import PoolManager
+ 
++from .ssrf_adapter import _PinnedHTTPConnectionPool, _PinnedHTTPSConnectionPool
++
+ logger = logging.getLogger("mcp-atlassian")
+ 
+ 
+@@ -48,6 +50,14 @@ def init_poolmanager(
+             ssl_context=context,
+             **pool_kwargs,
+         )
++        # This adapter mounts at a more specific prefix than the session-wide
++        # SsrfPinningAdapter and would otherwise silently replace it — keep the
++        # DNS-pinning connection classes so disabling SSL verification does not
++        # also disable the SSRF rebinding guard.
++        self.poolmanager.pool_classes_by_scheme = {  # type: ignore[attr-defined]
++            "http": _PinnedHTTPConnectionPool,
++            "https": _PinnedHTTPSConnectionPool,
++        }
+ 
+     def cert_verify(self, conn: Any, url: str, verify: bool, cert: Any | None) -> None:
+         """Override cert verification to disable SSL verification.
+diff --git a/src/mcp_atlassian/utils/ssrf_adapter.py b/src/mcp_atlassian/utils/ssrf_adapter.py
+new file mode 100644
+index 000000000..223a06777
+--- /dev/null
++++ b/src/mcp_atlassian/utils/ssrf_adapter.py
+@@ -0,0 +1,158 @@
++"""A requests transport adapter that pins DNS resolution against SSRF.
++
++``validate_url_for_ssrf`` resolves and checks a host once (in middleware), but the
++outbound request re-resolves the hostname at connect time, so a DNS-rebinding
++response can swap in an internal address between validation and connection — the
++TOCTOU that bypasses a validate-then-reconnect SSRF guard (GHSA-49xv, 72fm, 489g).
++
++This adapter closes that window at the connection itself: it resolves each host
++exactly once, rejects any candidate address that is not globally routable
++(cloud-metadata / private / loopback), and connects to that same validated
++address — there is no separate re-resolution to rebind. The original hostname is
++preserved for TLS SNI and certificate verification, so HTTPS is unaffected.
++
++Operator-trusted hosts — the configured ``JIRA_URL`` / ``CONFLUENCE_URL`` hosts
++and ``MCP_ALLOWED_URL_DOMAINS`` entries — are exempt from the non-global
++rejection (on-prem DC instances legitimately live on private networks or
++localhost). Those values come from the server environment, which an attacker
++cannot influence through a request, so the rebinding guard is not weakened for
++caller-supplied URLs. The single-resolution pin still applies to every host.
++"""
++
++import os
++import socket
++from typing import Any
++from urllib.parse import urlparse
++
++from requests import Session
++from requests.adapters import HTTPAdapter
++from urllib3.connection import HTTPConnection, HTTPSConnection
++from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
++from urllib3.exceptions import NewConnectionError
++from urllib3.poolmanager import PoolManager
++
++from .urls import _check_ip_address, _get_domain_allowlist, _hostname_matches_allowlist
++
++
++def _operator_trusted_hosts() -> list[str]:
++    """Hosts the operator explicitly configured or allowlisted via environment."""
++    hosts = []
++    for env in ("JIRA_URL", "CONFLUENCE_URL"):
++        raw = os.environ.get(env, "").strip()
++        if raw:
++            hostname = urlparse(raw).hostname
++            if hostname:
++                hosts.append(hostname.lower())
++    hosts.extend(_get_domain_allowlist() or [])
++    return hosts
++
++
++def _pinned_create_connection(
++    address: tuple[str, int],
++    timeout: Any = socket._GLOBAL_DEFAULT_TIMEOUT,  # type: ignore[attr-defined]  # noqa: SLF001
++    source_address: tuple[str, int] | None = None,
++    socket_options: Any = None,
++) -> socket.socket:
++    """Resolve once, reject non-global addresses, connect to the validated IP.
++
++    A single ``getaddrinfo`` result is both validated and connected to, so a
++    rebinding name cannot return a public IP to the check and a private IP to the
++    connection.
++    """
++    host, port = address
++    host_trusted = _hostname_matches_allowlist(host, _operator_trusted_hosts())
++    err: Exception | None = None
++    for af, socktype, proto, _canonname, sa in socket.getaddrinfo(
++        host, port, 0, socket.SOCK_STREAM
++    ):
++        ip = sa[0]
++        if not host_trusted and _check_ip_address(ip) is not None:
++            msg = f"SSRF blocked: {host} resolves to non-global address {ip}"
++            raise OSError(msg)
++        sock = None
++        try:
++            sock = socket.socket(af, socktype, proto)
++            if socket_options:
++                for opt in socket_options:
++                    sock.setsockopt(*opt)
++            if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:  # type: ignore[attr-defined]  # noqa: SLF001
++                sock.settimeout(timeout)
++            if source_address:
++                sock.bind(source_address)
++            sock.connect(sa)
++            return sock
++        except OSError as e:
++            err = e
++            if sock is not None:
++                sock.close()
++    if err is not None:
++        raise err
++    msg = f"getaddrinfo returned no addresses for {host}"
++    raise OSError(msg)
++
++
++class _PinnedConnMixin:
++    """Route socket creation through the validating, single-resolution connector."""
++
++    def _new_conn(self) -> socket.socket:
++        try:
++            return _pinned_create_connection(
++                (self._dns_host, self.port),  # type: ignore[attr-defined]
++                self.timeout,  # type: ignore[attr-defined]
++                source_address=self.source_address,  # type: ignore[attr-defined]
++                socket_options=self.socket_options,  # type: ignore[attr-defined]
++            )
++        except OSError as e:
++            raise NewConnectionError(
++                self,  # type: ignore[arg-type]
++                f"Failed to establish a new connection: {e}",
++            ) from e
++
++
++class _PinnedHTTPConnection(_PinnedConnMixin, HTTPConnection):
++    pass
++
++
++class _PinnedHTTPSConnection(_PinnedConnMixin, HTTPSConnection):
++    pass
++
++
++class _PinnedHTTPConnectionPool(HTTPConnectionPool):
++    ConnectionCls = _PinnedHTTPConnection
++
++
++class _PinnedHTTPSConnectionPool(HTTPSConnectionPool):
++    ConnectionCls = _PinnedHTTPSConnection
++
++
++class SsrfPinningAdapter(HTTPAdapter):
++    """A requests adapter that validates and pins DNS resolution for every call."""
++
++    def init_poolmanager(
++        self, connections: int, maxsize: int, block: bool = False, **pool_kwargs: Any
++    ) -> None:
++        self.poolmanager = PoolManager(
++            num_pools=connections, maxsize=maxsize, block=block, **pool_kwargs
++        )
++        # Runtime attribute of urllib3's PoolManager; absent from the type stubs.
++        self.poolmanager.pool_classes_by_scheme = {  # type: ignore[attr-defined]
++            "http": _PinnedHTTPConnectionPool,
++            "https": _PinnedHTTPSConnectionPool,
++        }
++
++
++def mount_ssrf_pinning(session: Session) -> None:
++    """Mount the SSRF DNS-pinning adapter for http/https on ``session``.
++
++    Preserves the retry policy of any adapter already mounted (e.g. the one the
++    Atlassian client configures), so pinning does not silently drop retries.
++    """
++    for scheme in ("https://", "http://"):
++        existing = session.adapters.get(scheme)
++        retries = getattr(existing, "max_retries", None)
++        adapter = (
++            SsrfPinningAdapter(max_retries=retries)
++            if retries is not None
++            else SsrfPinningAdapter()
++        )
++        session.mount(scheme, adapter)
+diff --git a/src/mcp_atlassian/utils/urls.py b/src/mcp_atlassian/utils/urls.py
+index 4468643bc..94f81afa0 100644
+--- a/src/mcp_atlassian/utils/urls.py
++++ b/src/mcp_atlassian/utils/urls.py
+@@ -4,9 +4,29 @@
+ import os
+ import re
+ import socket
++from collections.abc import Callable
++from typing import Any
+ from urllib.parse import urlparse
+ 
+ 
++def make_ssrf_redirect_hook() -> Callable[..., Any]:
++    """Return a requests ``response`` hook that blocks SSRF-unsafe redirects.
++
++    Attach to any session (``session.hooks["response"].append(...)``) so that an
++    open redirect cannot steer an outbound request to an internal/metadata host.
++    """
++
++    def hook(response: Any, **kwargs: Any) -> Any:
++        if response.is_redirect:
++            error = validate_url_for_ssrf(response.headers.get("Location", ""))
++            if error:
++                response.close()
++                raise ValueError(f"Redirect blocked (SSRF): {error}")
++        return response
++
++    return hook
++
++
+ def resolve_relative_url(url: str, base_url: str) -> str:
+     """Resolve a relative URL against a base URL.
+ 
+@@ -89,6 +109,12 @@ def validate_url_for_ssrf(url: str) -> str | None:
+     if parsed.scheme not in ("http", "https"):
+         return f"Blocked scheme: {parsed.scheme} (only http/https allowed)"
+ 
++    # requests (and browsers, per WHATWG) treat a backslash in the authority as a
++    # path separator, so "http://localhost\@evil.com/" parses (urlparse) to host
++    # evil.com but actually connects to localhost. Reject the parse mismatch.
++    if "\\" in parsed.netloc:
++        return f"Blocked backslash in URL authority: {url}"
++
+     hostname = parsed.hostname
+     if not hostname:
+         return "No hostname in URL"
+diff --git a/tests/e2e/cloud/test_confluence_cloud_operations.py b/tests/e2e/cloud/test_confluence_cloud_operations.py
+index f34a96d2e..e10224364 100644
+--- a/tests/e2e/cloud/test_confluence_cloud_operations.py
++++ b/tests/e2e/cloud/test_confluence_cloud_operations.py
+@@ -131,7 +131,7 @@ def test_upload_attachment_creates_new_version(
+         confluence_fetcher: ConfluenceFetcher,
+         cloud_instance: CloudInstanceInfo,
+         resource_tracker: CloudResourceTracker,
+-        tmp_path: Path,
++        workspace_tmp_path: Path,
+     ) -> None:
+         uid = uuid.uuid4().hex[:8]
+         page = confluence_fetcher.create_page(
+@@ -141,7 +141,7 @@ def test_upload_attachment_creates_new_version(
+         )
+         resource_tracker.add_confluence_page(page.id)
+ 
+-        attachment_path = tmp_path / f"cloud upload {uid} & notes #1.txt"
++        attachment_path = workspace_tmp_path / f"cloud upload {uid} & notes #1.txt"
+         attachment_path.write_text(f"first upload {uid}", encoding="utf-8")
+ 
+         first = confluence_fetcher.upload_attachment(
+diff --git a/tests/e2e/cloud/test_mcp_tools_cloud.py b/tests/e2e/cloud/test_mcp_tools_cloud.py
+index f9cb3f9e7..dd967ea24 100644
+--- a/tests/e2e/cloud/test_mcp_tools_cloud.py
++++ b/tests/e2e/cloud/test_mcp_tools_cloud.py
+@@ -306,12 +306,12 @@ async def test_confluence_create_update_page_with_content_file(
+         self,
+         mcp_client: Client,
+         cloud_instance: CloudInstanceInfo,
+-        tmp_path: Path,
++        workspace_tmp_path: Path,
+     ) -> None:
+         uid = uuid.uuid4().hex[:8]
+         page_id = None
+-        create_file = tmp_path / "cloud-create.md"
+-        update_file = tmp_path / "cloud-update.md"
++        create_file = workspace_tmp_path / "cloud-create.md"
++        update_file = workspace_tmp_path / "cloud-update.md"
+         create_file.write_text("# Created from file\n\nCloud body.", encoding="utf-8")
+         update_file.write_text("# Updated from file\n\nCloud body.", encoding="utf-8")
+ 
+diff --git a/tests/e2e/conftest.py b/tests/e2e/conftest.py
+index 2c45f9f54..6855b00e0 100644
+--- a/tests/e2e/conftest.py
++++ b/tests/e2e/conftest.py
+@@ -8,9 +8,12 @@
+ 
+ import base64
+ import logging
++import os
++import shutil
+ import uuid
+ from collections.abc import Generator
+ from dataclasses import dataclass
++from pathlib import Path
+ from typing import Any
+ 
+ import pytest
+@@ -24,6 +27,21 @@
+ 
+ logger = logging.getLogger(__name__)
+ 
++
++@pytest.fixture
++def workspace_tmp_path() -> Generator[Path, None, None]:
++    """A temp directory *inside* the workspace (CWD).
++
++    ``upload_attachment`` / ``content_file`` confine caller-supplied paths to
++    the working directory, so files fed to those tools must live under it —
++    pytest's ``tmp_path`` (outside CWD) is rejected by design.
++    """
++    d = Path.cwd() / f".e2e-tmp-{uuid.uuid4().hex[:8]}"
++    d.mkdir()
++    yield d
++    shutil.rmtree(d, ignore_errors=True)
++
++
+ # Default DC instance settings
+ DEFAULT_JIRA_URL = "http://localhost:8080"
+ DEFAULT_CONFLUENCE_URL = "http://localhost:8090"
+@@ -447,6 +465,12 @@ def dc_instance() -> DCInstanceInfo:
+     """
+     info = DCInstanceInfo()
+ 
++    # Mirror a real deployment: the operator sets JIRA_URL/CONFLUENCE_URL in the
++    # environment, which the SSRF pinning adapter trusts — without this, the
++    # localhost DC instances are (correctly) rejected as non-global addresses.
++    os.environ.setdefault("JIRA_URL", info.jira_url)
++    os.environ.setdefault("CONFLUENCE_URL", info.confluence_url)
++
+     if not _check_dc_health(info.jira_url):
+         pytest.skip(f"Jira DC not reachable at {info.jira_url}")
+     if not _check_dc_health(info.confluence_url):
+diff --git a/tests/e2e/test_confluence_dc_operations.py b/tests/e2e/test_confluence_dc_operations.py
+index 8fe0f4257..30fc685a5 100644
+--- a/tests/e2e/test_confluence_dc_operations.py
++++ b/tests/e2e/test_confluence_dc_operations.py
+@@ -80,7 +80,7 @@ def test_upload_attachment_creates_new_version(
+         confluence_fetcher: ConfluenceFetcher,
+         dc_instance: DCInstanceInfo,
+         resource_tracker: DCResourceTracker,
+-        tmp_path: Path,
++        workspace_tmp_path: Path,
+     ) -> None:
+         uid = uuid.uuid4().hex[:8]
+         page = confluence_fetcher.create_page(
+@@ -90,7 +90,7 @@ def test_upload_attachment_creates_new_version(
+         )
+         resource_tracker.add_confluence_page(page.id)
+ 
+-        attachment_path = tmp_path / f"dc upload {uid} & notes #1.txt"
++        attachment_path = workspace_tmp_path / f"dc upload {uid} & notes #1.txt"
+         attachment_path.write_text(f"first upload {uid}", encoding="utf-8")
+ 
+         first = confluence_fetcher.upload_attachment(
+diff --git a/tests/e2e/test_mcp_tools_dc.py b/tests/e2e/test_mcp_tools_dc.py
+index 68a19963f..6773db130 100644
+--- a/tests/e2e/test_mcp_tools_dc.py
++++ b/tests/e2e/test_mcp_tools_dc.py
+@@ -305,12 +305,12 @@ async def test_confluence_create_update_page_with_content_file(
+         self,
+         mcp_client: Client,
+         dc_instance: DCInstanceInfo,
+-        tmp_path: Path,
++        workspace_tmp_path: Path,
+     ) -> None:
+         uid = uuid.uuid4().hex[:8]
+         page_id = None
+-        create_file = tmp_path / "dc-create.md"
+-        update_file = tmp_path / "dc-update.md"
++        create_file = workspace_tmp_path / "dc-create.md"
++        update_file = workspace_tmp_path / "dc-update.md"
+         create_file.write_text("# Created from file\n\nDC body.", encoding="utf-8")
+         update_file.write_text("# Updated from file\n\nDC body.", encoding="utf-8")
+ 
+diff --git a/tests/unit/confluence/test_attachments.py b/tests/unit/confluence/test_attachments.py
+index 75fe4154d..ebe78f307 100644
+--- a/tests/unit/confluence/test_attachments.py
++++ b/tests/unit/confluence/test_attachments.py
+@@ -3,6 +3,7 @@
+ import json
+ import os
+ import tempfile
++from pathlib import Path
+ from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
+ 
+ import pytest
+@@ -123,6 +124,10 @@ def test_upload_attachment_success(self, attachments_mixin: AttachmentsMixin):
+ 
+         # Mock file operations
+         with (
++            # Pin the workspace so the absolute path resolves inside it — keeps
++            # validate_safe_path passing deterministically across Python versions
++            # (mocking os.path.abspath does not reach pathlib.Path.resolve on 3.13).
++            patch("os.getcwd", return_value="/absolute/path"),
+             patch("os.path.exists") as mock_exists,
+             patch("os.path.getsize") as mock_getsize,
+             patch("os.path.isabs") as mock_isabs,
+@@ -176,6 +181,7 @@ def _capture_upload_url(self, attachments_mixin, config_url: str) -> str:
+         self._mock_rest_api_upload(attachments_mixin)
+ 
+         with (
++            patch("os.getcwd", return_value="/absolute/path"),
+             patch("os.path.exists", return_value=True),
+             patch("os.path.getsize", return_value=100),
+             patch("os.path.isabs", return_value=True),
+@@ -228,33 +234,19 @@ def test_upload_attachment_server_dc_no_wiki_prefix(
+             "/rest/api/content/123456/child/attachment"
+         )
+ 
+-    def test_upload_attachment_relative_path(self, attachments_mixin: AttachmentsMixin):
+-        """Test attachment upload with a relative path."""
+-        # Mock the REST API call
++    def test_upload_attachment_relative_path(
++        self, attachments_mixin: AttachmentsMixin, tmp_path: Path
++    ):
++        """A relative path inside the workspace resolves and uploads."""
+         self._mock_rest_api_upload(attachments_mixin)
+ 
+-        # Mock file operations
+-        with (
+-            patch("os.path.exists") as mock_exists,
+-            patch("os.path.getsize") as mock_getsize,
+-            patch("os.path.isabs") as mock_isabs,
+-            patch("os.path.abspath") as mock_abspath,
+-            patch("os.path.basename") as mock_basename,
+-            patch("builtins.open", mock_open(read_data=b"test content")),
+-        ):
+-            mock_exists.return_value = True
+-            mock_getsize.return_value = 100
+-            mock_isabs.return_value = False
+-            mock_abspath.return_value = "/absolute/path/test_file.txt"
+-            mock_basename.return_value = "test_file.txt"
++        (tmp_path / "test_file.txt").write_bytes(b"test content")
+ 
+-            # Call the method with a relative path
++        with patch("os.getcwd", return_value=str(tmp_path)):
+             result = attachments_mixin.upload_attachment("123456", "test_file.txt")
+ 
+-            # Assertions
+-            assert result["success"] is True
+-            mock_isabs.assert_called_once_with("test_file.txt")
+-            mock_abspath.assert_called_once_with("test_file.txt")
++        assert result["success"] is True
++        attachments_mixin.confluence._session.post.assert_called_once()
+ 
+     def test_upload_attachment_no_content_id(self, attachments_mixin: AttachmentsMixin):
+         """Test attachment upload with no content ID."""
+@@ -282,6 +274,7 @@ def test_upload_attachment_file_not_found(
+         """Test attachment upload when file doesn't exist."""
+         # Mock file operations
+         with (
++            patch("os.getcwd", return_value="/absolute/path"),
+             patch("os.path.exists") as mock_exists,
+             patch("os.path.isabs") as mock_isabs,
+             patch("os.path.abspath") as mock_abspath,
+@@ -311,6 +304,7 @@ def test_upload_attachment_api_error(self, attachments_mixin: AttachmentsMixin):
+ 
+         # Mock file operations
+         with (
++            patch("os.getcwd", return_value="/absolute/path"),
+             patch("os.path.exists") as mock_exists,
+             patch("os.path.isabs") as mock_isabs,
+             patch("os.path.abspath") as mock_abspath,
+@@ -378,6 +372,7 @@ def test_upload_attachment_versioning_fallback(
+         attachments_mixin.confluence._session.get.return_value = list_response
+ 
+         with (
++            patch("os.getcwd", return_value="/absolute/path"),
+             patch("os.path.exists", return_value=True),
+             patch("os.path.getsize", return_value=200),
+             patch("os.path.isabs", return_value=True),
+@@ -1787,6 +1782,37 @@ def test_download_content_attachments_absolute_escape(
+         with pytest.raises(ValueError, match="Path traversal detected"):
+             confluence_mixin.download_content_attachments("12345", "/etc")
+ 
++    # --- Upload-side path traversal regression -----------------------------------
++    # The download tests above cover the CVE-2026-27825 fix. The upload path used to
++    # feed any caller-supplied file_path to the sink after only an os.path.exists
++    # check. These tests assert the secure outcome — the sink is never reached with
++    # a path outside the workspace.
++    # Covers GHSA-wm45, vc25, 93xw, 6cr4, f4p7, f6pj, mrq8, wv8v, p6hp, h7wj, mfv2,
++    # f26r, 9547, cc5h (read half). Asserts on the sink (not an exception type)
++    # because upload_attachment wraps its body in except Exception -> error dict.
++
++    @pytest.mark.security_regression
++    @pytest.mark.parametrize("attack", ["absolute_outside_cwd", "relative_traversal"])
++    def test_upload_attachment_does_not_read_outside_workspace(
++        self,
++        confluence_mixin: AttachmentsMixin,
++        tmp_path: Path,
++        attack: str,
++    ) -> None:
++        """A file_path resolving outside the workspace must not reach the sink."""
++        workspace = tmp_path / "workspace"
++        workspace.mkdir()
++        secret = tmp_path / "secret.txt"  # sibling of workspace -> outside it
++        secret.write_bytes(b"SECRET-EXFIL")
++        malicious = str(secret) if attack == "absolute_outside_cwd" else "../secret.txt"
++
++        confluence_mixin._upload_attachment_direct = MagicMock(return_value={"id": "1"})
++
++        with patch("os.getcwd", return_value=str(workspace)):
++            confluence_mixin.upload_attachment("123456", malicious)
++
++        confluence_mixin._upload_attachment_direct.assert_not_called()
++
+ 
+ class TestResolveAttachmentDownloadUrl:
+     """Tests for AttachmentsMixin._resolve_attachment_download_url.
+diff --git a/tests/unit/confluence/test_client.py b/tests/unit/confluence/test_client.py
+index 46c95bb34..1e6af0c1b 100644
+--- a/tests/unit/confluence/test_client.py
++++ b/tests/unit/confluence/test_client.py
+@@ -379,6 +379,7 @@ def test_confluence_fetcher_attachment_method_calls():
+ 
+         # Test upload_attachment can be called
+         with (
++            patch("os.getcwd", return_value="/path/to"),
+             patch("os.path.exists", return_value=True),
+             patch("os.path.isabs", return_value=True),
+             patch("os.path.basename", return_value="test.txt"),
+diff --git a/tests/unit/confluence/test_search.py b/tests/unit/confluence/test_search.py
+index 7c71a5868..49b1ce9fc 100644
+...[diff truncated]...

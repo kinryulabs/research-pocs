@@ -1,0 +1,14 @@
+exit_code=0 timed_out=False oracle_hit=False
+detail: no canary
+STDERR:
+/usr/local/lib/python3.11/site-packages/fastmcp/server/auth/providers/jwt.py:10: AuthlibDeprecationWarning: authlib.jose module is deprecated, please use joserfc instead.
+It will be compatible before version 2.0.0.
+  from authlib.jose import JsonWebKey, JsonWebToken
+/usr/local/lib/python3.11/site-packages/authlib/integrations/httpx_client/assertion_client.py:5: AuthlibDeprecationWarning: The httpx module is deprecated; please use httpx2 instead.
+  from ._compat import httpx2
+/poc/poc.py:106: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient
+WARNING - mcp_atlassian.utils.toolsets - TOOLSETS is not set — currently defaults to all toolsets. In v0.22.0, the default will change to 6 core toolsets only. Set TOOLSETS=all explicitly to preserve current behavior.
+WARNING - mcp-atlassian.server.main - UserTokenMiddleware: rejecting unauthenticated MCP request (no user identity and ALLOW_GLOBAL_CRED_FALLBACK is off)
+[poc] POST /mcp -> HTTP 401
+[poc] unauthenticated MCP request was rejected at the transport boundary (patched behavior) -- vulnerability not triggered.
