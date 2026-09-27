@@ -24,7 +24,12 @@ def collect() -> list[dict]:
         data = yaml.safe_load(meta.read_text())
         data["_path"] = meta.parent.relative_to(ROOT).as_posix()
         entries.append(data)
-    return sorted(entries, key=lambda d: str(d.get("date", "")), reverse=True)
+    # newest first, with the path as a stable tie-break so the ordering is identical
+    # on every machine (filesystem glob order is not portable, which otherwise makes
+    # the generated index churn between runs).
+    entries.sort(key=lambda d: d["_path"])
+    entries.sort(key=lambda d: str(d.get("date", "")), reverse=True)
+    return entries
 
 
 def validate(entries: list[dict], valid_tags: set[str]) -> None:
