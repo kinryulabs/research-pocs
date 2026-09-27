@@ -1,0 +1,895 @@
+diff --git a/env.example b/env.example
+index 02e6f1561d..cdacf6d59a 100644
+--- a/env.example
++++ b/env.example
+@@ -119,7 +119,12 @@ OLLAMA_EMULATING_MODEL_TAG=latest
+ ### Use this key in HTTP requests with the 'X-API-Key' header
+ ### Example: curl -H "X-API-Key: your-secure-api-key-here" http://localhost:9621/query
+ # LIGHTRAG_API_KEY=your-secure-api-key-here
+-### WHITELIST_PATHS: paths exempt from authentication (prefix match with /*).
++### WHITELIST_PATHS: paths exempt from authentication. A /* suffix matches on
++### path-segment boundaries, so /api/* covers /api and everything under /api/
++### (it does NOT match a sibling like /apikeys).
++### Entries are internal route paths and must NOT include LIGHTRAG_API_PREFIX:
++### the mount prefix is removed before matching, so /health here exempts
++### /site01/health as the browser sees it (see docs/MultiSiteDeployment.md).
+ ### Default keeps /api/* open for Ollama-client compatibility (Ollama is
+ ### unauthenticated by default). To require auth on the Ollama routes too when
+ ### the server is network-exposed, narrow this to /health.
+diff --git a/lightrag/api/admission_middleware.py b/lightrag/api/admission_middleware.py
+index b43c88ed87..fda178e0c3 100644
+--- a/lightrag/api/admission_middleware.py
++++ b/lightrag/api/admission_middleware.py
+@@ -37,7 +37,7 @@
+ from lightrag.utils import logger
+ 
+ from .admission import AdmissionTicket, publish_admission_ticket
+-from .utils_api import credentials_accepted, path_is_whitelisted
++from .utils_api import credentials_accepted, get_route_path, path_is_whitelisted
+ 
+ # Ingestion routes that accept a body and create documents. ``/documents/scan``
+ # is absent on purpose: it takes no body and is exempt from capacity by design
+@@ -163,10 +163,7 @@ def __init__(
+     def _is_admission_path(self, scope: dict[str, Any]) -> bool:
+         if scope.get("method") != "POST":
+             return False
+-        path = scope.get("path") or ""
+-        if self._api_prefix and path.startswith(self._api_prefix):
+-            path = path[len(self._api_prefix) :] or "/"
+-        return path in ADMISSION_PATHS
++        return get_route_path(scope, self._api_prefix) in ADMISSION_PATHS
+ 
+     def _resolve_rag(self) -> Optional[Any]:
+         try:
+@@ -208,8 +205,9 @@ async def __call__(self, scope, receive, send) -> None:
+ 
+         ticket: Optional[AdmissionTicket] = None
+         if rag is not None and _admission_capacity(rag) > 0:
+-            path = scope.get("path") or ""
+-            if not path_is_whitelisted(path) and not credentials_accepted(
++            if not path_is_whitelisted(
++                scope, mount_prefix=self._api_prefix
++            ) and not credentials_accepted(
+                 token=_bearer_token(scope),
+                 api_key_header_value=_header(scope, b"x-api-key"),
+                 api_key=self._api_key,
+diff --git a/lightrag/api/config.py b/lightrag/api/config.py
+index 535cfb7b92..8d85e65e94 100644
+--- a/lightrag/api/config.py
++++ b/lightrag/api/config.py
+@@ -313,6 +313,30 @@ def get_binding_env_value(env_key: str, default: str) -> str:
+     return normalize_binding_name(get_env_value(env_key, default)) or default
+ 
+ 
++def normalize_api_prefix(value: str | None) -> str:
++    """Canonicalize an API prefix before handing it to FastAPI's ``root_path``.
++
++    Strips surrounding whitespace, ensures a leading slash, drops a trailing
++    slash, and treats empty/"/" as "no prefix". Raw CLI/env input like
++    ``"site01"`` or ``"/site01/"`` would otherwise feed an invalid form to
++    FastAPI and to the WebUI prefix injection.
++
++    Lives here rather than beside its consumer in ``lightrag_server`` because
++    more than one layer has to answer "is there actually a mount prefix?" --
++    ``create_app`` and the startup security banner -- and they must answer it
++    identically. Reading the raw value instead makes ``LIGHTRAG_API_PREFIX=/``
++    look like a prefixed deployment when it is not.
++    """
++    if value is None:
++        return ""
++    value = value.strip()
++    if not value or value == "/":
++        return ""
++    if not value.startswith("/"):
++        value = "/" + value
++    return value.rstrip("/")
++
++
+ def parse_args() -> argparse.Namespace:
+     """
+     Parse command line arguments with environment variable fallback
+diff --git a/lightrag/api/lightrag_server.py b/lightrag/api/lightrag_server.py
+index 6b1d737219..4c75ab4cc7 100644
+--- a/lightrag/api/lightrag_server.py
++++ b/lightrag/api/lightrag_server.py
+@@ -39,6 +39,7 @@
+ from lightrag.api.admission_middleware import AdmissionMiddleware
+ from .config import (
+     global_args,
++    normalize_api_prefix,
+     update_uvicorn_mode_config,
+     get_default_host,
+     resolve_asymmetric_embedding_opt_in,
+@@ -398,24 +399,6 @@ def _inject_swagger_theme(html: str, theme: str) -> str:
+ WEBUI_PATH = "/webui"
+ 
+ 
+-def _normalize_api_prefix(value: str | None) -> str:
+-    """Canonicalize an API prefix before handing it to FastAPI's ``root_path``.
+-
+-    Strips surrounding whitespace, ensures a leading slash, drops a trailing
+-    slash, and treats empty/"/" as "no prefix". Raw CLI/env input like
+-    ``"site01"`` or ``"/site01/"`` would otherwise feed an invalid form to
+-    FastAPI and to the WebUI prefix injection.
+-    """
+-    if value is None:
+-        return ""
+-    value = value.strip()
+-    if not value or value == "/":
+-        return ""
+-    if not value.startswith("/"):
+-        value = "/" + value
+-    return value.rstrip("/")
+-
+-
+ class _RootPathNormalizationMiddleware:
+     """Make Mount sub-apps work when the reverse proxy strips the API prefix.
+ 
+@@ -1414,7 +1397,7 @@ async def lifespan(app: FastAPI):
+ 
+     # The WebUI mount path is fixed at "/webui" — see
+     # docs/MultiSiteDeployment.md for the rationale.
+-    api_prefix = _normalize_api_prefix(getattr(args, "api_prefix", None))
++    api_prefix = normalize_api_prefix(getattr(args, "api_prefix", None))
+     webui_path = WEBUI_PATH
+ 
+     app_kwargs = {
+diff --git a/lightrag/api/utils_api.py b/lightrag/api/utils_api.py
+index b4e251ab20..7ff6d3a3f3 100644
+--- a/lightrag/api/utils_api.py
++++ b/lightrag/api/utils_api.py
+@@ -5,7 +5,7 @@
+ import os
+ import argparse
+ from collections import OrderedDict
+-from typing import Optional, List, Tuple
++from typing import Any, Mapping, Optional, List, Tuple
+ import sys
+ import time
+ import uuid
+@@ -22,7 +22,12 @@
+ from starlette.status import HTTP_403_FORBIDDEN
+ from ..utils import safe_log_value
+ from .auth import auth_handler
+-from .config import ollama_server_infos, global_args, get_env_value
++from .config import (
++    ollama_server_infos,
++    global_args,
++    get_env_value,
++    normalize_api_prefix,
++)
+ 
+ logger = logging.getLogger("lightrag")
+ 
+@@ -252,19 +257,78 @@ def check_env_file():
+ auth_configured = bool(auth_handler.accounts)
+ 
+ 
+-def path_is_whitelisted(path: str) -> bool:
+-    """Whether ``WHITELIST_PATHS`` exempts ``path`` from authentication.
++def get_route_path(scope: Mapping[str, Any], mount_prefix: str = "") -> str:
++    """The route path a matcher must compare against: ``scope["path"]`` minus the
++    ASGI mount prefix.
++
++    In canonical ASGI form ``scope["path"]`` *includes* ``root_path``, so a
++    request routed to ``/documents`` on a server mounted at ``/site01`` carries
++    ``path == "/site01/documents"``. Anything comparing against configured route
++    paths (``WHITELIST_PATHS``, ``ADMISSION_PATHS``,
++    ``_TOKEN_RENEWAL_SKIP_PATHS``) must subtract the prefix first, or it compares
++    two different kinds of path.
++
++    ``root_path`` is authoritative when present: ``FastAPI.__call__`` writes it
++    from ``app.root_path`` before the middleware stack runs, so every layer sees
++    it. ``mount_prefix`` is the fallback for callers whose scope was not built by
++    FastAPI (hand-rolled ASGI scopes in tests, for instance).
++
++    The subtraction is deliberately guarded rather than an unconditional slice,
++    because the two callers do not see the same scope shape. The admission
++    middleware runs *outside* ``_RootPathNormalizationMiddleware`` (that ordering
++    is intentional, so CORS can wrap its refusals), so in a proxy-strip
++    deployment it sees a bare ``/documents/upload`` while ``root_path`` is
++    already ``/site01``. An unguarded ``path[len(prefix):]`` would silently
++    mangle that into ``ments``.
++
++    Mirrors ``starlette._utils.get_route_path`` — inlined rather than imported
++    because that module is private — with one documented divergence: an
++    exact-prefix hit returns ``"/"`` where Starlette returns ``""``. Configured
++    paths are always written with a leading slash, so ``"/"`` is the normal form
++    the matchers here expect.
++    """
++    path = scope.get("path") or ""
++    prefix = (scope.get("root_path") or mount_prefix or "").rstrip("/")
++    if not prefix or not path.startswith(prefix):
++        return path
++    remainder = path[len(prefix) :]
++    if not remainder:
++        return "/"
++    if remainder.startswith("/"):
++        return remainder
++    # Mid-segment collision (prefix ``/api`` against path ``/apikeys``): the
++    # prefix is not actually a path-segment prefix here, so nothing is removed.
++    return path
++
++
++def path_is_whitelisted(scope: Mapping[str, Any], *, mount_prefix: str = "") -> bool:
++    """Whether ``WHITELIST_PATHS`` exempts this request from authentication.
+ 
+     Shared so every layer that has to answer "may this request skip auth?" uses
+     one matcher: the enforcing route dependency
+     (:func:`get_combined_auth_dependency`) and the pure-ASGI admission
+     middleware, which must pre-authenticate before reading a request body and
+     would otherwise 401 a path the route itself lets through (LR2 §9.3).
++
++    Takes the ASGI scope, not a path string, so the mount-prefix normalization
++    cannot be forgotten at a call site. ``WHITELIST_PATHS`` entries are route
++    paths written without ``LIGHTRAG_API_PREFIX``; matching the raw
++    ``request.url.path`` against them made the shipped default ``/health,/api/*``
++    exempt *every* route as soon as the mount prefix itself started with
++    ``/api`` — the whole API, unauthenticated, including ``DELETE /documents``.
++
++    A ``/*`` entry matches on path-segment boundaries only, so ``/api/*`` exempts
++    ``/api`` and everything under ``/api/`` but not a sibling route that merely
++    starts with those characters (``/graph/*`` must not exempt ``/graphs``). The
++    catch-all ``/*`` compiles to an empty prefix and still matches everything,
++    since every path starts with ``/``.
+     """
++    route = get_route_path(scope, mount_prefix)
+     for pattern, is_prefix in whitelist_patterns:
+-        if (is_prefix and path.startswith(pattern)) or (
+-            not is_prefix and path == pattern
+-        ):
++        if is_prefix:
++            if route == pattern or route.startswith(pattern + "/"):
++                return True
++        elif route == pattern:
+             return True
+     return False
+ 
+@@ -345,9 +409,12 @@ async def combined_dependency(
+         if api_key_header is None
+         else Security(api_key_header),
+     ):
+-        # 1. Check if path is in whitelist
+-        path = request.url.path
+-        if path_is_whitelisted(path):
++        # 1. Check if path is in whitelist.
++        # The route path, not request.url.path: the latter still carries the
++        # mount prefix (see get_route_path), and both the whitelist and the
++        # renewal skip list below are written as unprefixed route paths.
++        path = get_route_path(request.scope)
++        if path_is_whitelisted(request.scope):
+             return  # Whitelist path, allow access
+ 
+         # 2. Validate token first if provided in the request (Ensure 401 error if token is invalid)
+@@ -704,19 +771,33 @@ def display_splash_screen(args: argparse.Namespace) -> None:
+     Or restrict access by binding to loopback only: HOST=127.0.0.1
+     """)
+ 
+-    # When authentication IS configured but the server is exposed on a
+-    # non-loopback address, warn that the default whitelist still exempts the
++    # When authentication IS configured but the server is reachable from a
++    # network, warn that the default whitelist still exempts the
+     # Ollama-compatible /api/* routes (kept open for Ollama-client compatibility).
+     # Those routes invoke the LLM and read the knowledge base, so they stay
+     # public unless the operator narrows WHITELIST_PATHS (e.g. to /health).
++    #
++    # A configured LIGHTRAG_API_PREFIX counts as reachable regardless of the bind
++    # address: the prefix exists to be served behind a reverse proxy, so the
++    # canonical multi-site deployment (proxy on the public interface, backend on
++    # loopback) is exposed while a loopback-only test on the bind address is not.
++    # The prefix is normalized first, because LIGHTRAG_API_PREFIX=/ means "no
++    # prefix" and must not read as a proxied deployment.
+     if args.key or args.auth_accounts:
+         loopback_hosts = {"127.0.0.1", "::1", "localhost"}
+         ollama_open = whitelist_exposes_api_routes(args.whitelist_paths)
+-        if args.host not in loopback_hosts and ollama_open:
++        behind_proxy = bool(normalize_api_prefix(getattr(args, "api_prefix", None)))
++        reachable = args.host not in loopback_hosts or behind_proxy
++        if reachable and ollama_open:
++            where = (
++                f"behind the '{args.api_prefix}' reverse-proxy prefix"
++                if behind_proxy
++                else f"on '{args.host}'"
++            )
+             ASCIIColors.yellow("\n⚠️  Security Warning:")
+             ASCIIColors.white(f"""    WHITELIST_PATHS ('{args.whitelist_paths}') exempts the Ollama-compatible
+     /api/* routes (/api/chat, /api/generate, ...) from authentication, so they
+-    remain publicly accessible on '{args.host}' even though auth is enabled.
++    remain publicly accessible {where} even though auth is enabled.
+     These routes invoke the LLM and read your knowledge base. If you do not need
+     open Ollama access, set WHITELIST_PATHS=/health to require authentication.
+     """)
+diff --git a/tests/api/auth/test_shared_credential_check.py b/tests/api/auth/test_shared_credential_check.py
+index 482e38e5f6..62c99cb241 100644
+--- a/tests/api/auth/test_shared_credential_check.py
++++ b/tests/api/auth/test_shared_credential_check.py
+@@ -47,13 +47,19 @@ def _set(entries):
+     return _set
+ 
+ 
++def _scope(path: str, root_path: str = "") -> dict:
++    """A minimal ASGI scope. ``path`` is in canonical form: it includes
++    ``root_path``, the way FastAPI hands it to the route dependency."""
++    return {"type": "http", "path": path, "root_path": root_path}
++
++
+ def test_exact_and_prefix_whitelist_entries(patterns):
+     patterns(["/health", "/api/*"])
+ 
+-    assert _utils_api.path_is_whitelisted("/health") is True
+-    assert _utils_api.path_is_whitelisted("/api/chat") is True
+-    assert _utils_api.path_is_whitelisted("/healthz") is False
+-    assert _utils_api.path_is_whitelisted("/documents/upload") is False
++    assert _utils_api.path_is_whitelisted(_scope("/health")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/api/chat")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/healthz")) is False
++    assert _utils_api.path_is_whitelisted(_scope("/documents/upload")) is False
+ 
+ 
+ def test_catch_all_whitelist_covers_ingestion(patterns):
+@@ -61,7 +67,77 @@ def test_catch_all_whitelist_covers_ingestion(patterns):
+     middleware on paths the route dependency waves through."""
+     patterns(["/*"])
+ 
+-    assert _utils_api.path_is_whitelisted("/documents/upload") is True
++    assert _utils_api.path_is_whitelisted(_scope("/documents/upload")) is True
++
++
++def test_entries_are_matched_against_the_route_path(patterns):
++    """Entries are unprefixed route paths, so the mount prefix must come off
++    before matching — in either forwarding form.
++
++    Getting this wrong collapsed the shipped default ``/health,/api/*`` into a
++    blanket exemption for every route whenever the mount prefix itself started
++    with ``/api``, and simultaneously stopped ``/health`` from matching under any
++    other prefix.
++    """
++    patterns(["/health", "/api/*"])
++
++    # Verbatim forwarding: the proxy passes the prefixed path through.
++    assert _utils_api.path_is_whitelisted(_scope("/api/v1/health", "/api/v1")) is True
++    assert (
++        _utils_api.path_is_whitelisted(_scope("/api/v1/documents", "/api/v1")) is False
++    )
++    assert _utils_api.path_is_whitelisted(_scope("/site01/health", "/site01")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/site01/api/tags", "/site01")) is True
++    assert (
++        _utils_api.path_is_whitelisted(_scope("/site01/documents", "/site01")) is False
++    )
++
++    # Proxy-strip forwarding: the admission middleware runs outside the
++    # normalizing middleware, so it sees a bare path with root_path already set.
++    # Nothing may be removed here.
++    assert _utils_api.path_is_whitelisted(_scope("/health", "/api/v1")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/documents", "/api/v1")) is False
++
++
++def test_prefix_entries_match_on_segment_boundaries(patterns):
++    """A ``/*`` entry exempts the prefix and what is under it, nothing else.
++
++    Bare ``startswith`` widened every prefix entry past the segment the operator
++    wrote: ``/graph/*`` also exempted ``GET /graphs``, a real route in this
++    codebase, and ``/api/*`` would exempt any future ``/apikeys``.
++    """
++    patterns(["/graph/*"])
++
++    assert _utils_api.path_is_whitelisted(_scope("/graph")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/graph/label/list")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/graphs")) is False
++
++    patterns(["/api/*"])
++    assert _utils_api.path_is_whitelisted(_scope("/api/tags")) is True
++    assert _utils_api.path_is_whitelisted(_scope("/apikeys")) is False
++
++
++def test_mount_prefix_falls_back_to_the_explicit_argument(patterns):
++    """Callers whose scope was not built by FastAPI (hand-rolled ASGI scopes)
++    pass the prefix explicitly."""
++    patterns(["/health"])
++
++    assert (
++        _utils_api.path_is_whitelisted(
++            {"type": "http", "path": "/site01/health"}, mount_prefix="/site01"
++        )
++        is True
++    )
++
++
++def test_route_path_never_cuts_mid_segment():
++    """``/api`` is not a segment prefix of ``/apikeys``, so nothing comes off —
++    an unguarded slice would produce ``keys``."""
++    assert _utils_api.get_route_path(_scope("/apikeys", "/api")) == "/apikeys"
++    assert _utils_api.get_route_path(_scope("/api/tags", "/api")) == "/tags"
++    # An exact-prefix hit normalizes to "/" (Starlette returns "" here).
++    assert _utils_api.get_route_path(_scope("/site01", "/site01")) == "/"
++    assert _utils_api.get_route_path(_scope("/documents")) == "/documents"
+ 
+ 
+ def test_fully_open_mode_accepts_anything(monkeypatch):
+diff --git a/tests/api/auth/test_token_renewal_bounds.py b/tests/api/auth/test_token_renewal_bounds.py
+index 6e88f70f47..a49c4a4b24 100644
+--- a/tests/api/auth/test_token_renewal_bounds.py
++++ b/tests/api/auth/test_token_renewal_bounds.py
+@@ -618,3 +618,61 @@ def test_rate_limits_are_per_subject(self, monkeypatch):
+         assert first.headers.get("X-New-Token")
+         assert second.headers.get("X-New-Token")
+         assert set(utils_api._token_renewal_cache) == {"alice", "bob"}
++
++
++@pytest.mark.offline
++class TestRenewalSkipUnderApiPrefix:
++    """``_TOKEN_RENEWAL_SKIP_PATHS`` is a list of route paths too.
++
++    It shares the path input with the whitelist check, so it shared that bug: the
++    dependency passed ``request.url.path``, which still carries the mount prefix,
++    and under ``LIGHTRAG_API_PREFIX`` no skip entry matched. The frequently-polled
++    endpoints the list exists to protect went back to minting a token on every
++    poll.
++
++    A local app is built here instead of reusing ``_client``: that helper mounts a
++    bare ``FastAPI()`` with only ``GET /documents`` and no ``root_path``, so a
++    request to ``/api/v1/documents/paginated`` would 404 without ever running the
++    dependency -- and an assertion that no ``X-New-Token`` came back would pass
++    for the wrong reason.
++    """
++
++    @staticmethod
++    def _client(monkeypatch, api_prefix: str) -> TestClient:
++        monkeypatch.setattr(utils_api, "auth_configured", False)
++        server = importlib.import_module("lightrag.api.lightrag_server")
++
++        dependency = utils_api.get_combined_auth_dependency(None)
++        app = FastAPI(root_path=api_prefix or None)
++        if api_prefix:
++            app.add_middleware(server._RootPathNormalizationMiddleware)
++
++        # In the skip list, and its sibling that is not.
++        @app.get("/documents/paginated", dependencies=[Depends(dependency)])
++        async def paginated():
++            return {"documents": []}
++
++        @app.get("/documents", dependencies=[Depends(dependency)])
++        async def documents():
++            return {"ok": True}
++
++        return TestClient(app)
++
++    @pytest.mark.parametrize("mode", ["verbatim", "strip"])
++    def test_skip_list_still_applies_under_a_mount_prefix(self, monkeypatch, mode):
++        client = self._client(monkeypatch, "/api/v1")
++        token = _near_expiry_token("guest")
++        prefix = "" if mode == "strip" else "/api/v1"
++
++        skipped = client.get(f"{prefix}/documents/paginated", headers=_bearer(token))
++        renewed = client.get(f"{prefix}/documents", headers=_bearer(token))
++
++        # The route ran: a 404 here would mean the dependency never executed and
++        # the header assertions below would prove nothing.
++        assert skipped.status_code == 200
++        assert renewed.status_code == 200
++
++        assert skipped.headers.get("X-New-Token") is None
++        # Positive control: renewal is genuinely enabled in this app, so the
++        # missing header above is the skip list working, not renewal being off.
++        assert renewed.headers.get("X-New-Token")
+diff --git a/tests/api/auth/test_whitelist_path_prefix.py b/tests/api/auth/test_whitelist_path_prefix.py
+new file mode 100644
+index 0000000000..2f4c44fd24
+--- /dev/null
++++ b/tests/api/auth/test_whitelist_path_prefix.py
+@@ -0,0 +1,155 @@
++"""WHITELIST_PATHS under LIGHTRAG_API_PREFIX, over real HTTP.
++
++``WHITELIST_PATHS`` entries are unprefixed route paths. The enforcing dependency
++used to match them against ``request.url.path``, which in ASGI still carries the
++mount prefix. Two failures followed from that single mismatch:
++
++* **over-exemption** — the shipped default ``/health,/api/*`` compiles a bare
++  ``/api`` prefix entry, so once the mount prefix itself began with ``/api``
++  (``/api/v1`` is the value in the project's own ``--help``) every request path
++  began with ``/api``, the whitelist degenerated to always-true, and the check
++  returned before any credential was read. ``DELETE /documents`` answered 200
++  with no credentials, in both forwarding modes;
++* **under-exemption** — under any other prefix (``/site01``) no entry matched at
++  all, so ``/health`` stopped answering liveness probes and the Ollama-compatible
++  routes stopped being exempt.
++
++Every assertion here goes through the real dependency over a real client, not
++through ``path_is_whitelisted`` directly: the fix changed that function's
++signature, so a direct call would fail on the old code with a ``TypeError``,
++which proves only that a new symbol exists. A status-code assertion fails
++behaviorally.
++
++Route methods deliberately match the production registrations — ``GET
++/api/tags``, never ``GET /api/chat`` (registered as POST). A method mismatch
++returns 405 from the router *without running the dependency at all*, which is
++identical whether or not the path is exempt.
++"""
++
++from __future__ import annotations
++
++import importlib
++import sys
++
++import pytest
++from fastapi import Depends, FastAPI
++from fastapi.testclient import TestClient
++
++_original_argv = sys.argv[:]
++sys.argv = [sys.argv[0]]
++_utils_api = importlib.import_module("lightrag.api.utils_api")
++_server = importlib.import_module("lightrag.api.lightrag_server")
++sys.argv = _original_argv
++
++pytestmark = pytest.mark.offline
++
++API_KEY = "the-operators-secret-api-key"
++
++# The shipped default: WHITELIST_PATHS=/health,/api/*
++_DEFAULT_PATTERNS = [("/health", False), ("/api", True)]
++
++
++def _client(monkeypatch, api_prefix: str) -> TestClient:
++    """The real dependency and the real path-normalizing middleware, mounted the
++    way ``create_app`` mounts them for a prefixed deployment."""
++    monkeypatch.setattr(_utils_api, "whitelist_patterns", list(_DEFAULT_PATTERNS))
++    monkeypatch.setattr(_utils_api, "auth_configured", True)
++
++    dependency = _utils_api.get_combined_auth_dependency(API_KEY)
++    app = FastAPI(root_path=api_prefix or None)
++    if api_prefix:
++        app.add_middleware(_server._RootPathNormalizationMiddleware)
++
++    @app.get("/documents", dependencies=[Depends(dependency)])
++    async def list_documents():
++        return {"statuses": {}}
++
++    @app.delete("/documents", dependencies=[Depends(dependency)])
++    async def clear_documents():
++        return {"status": "success"}
++
++    @app.get("/health", dependencies=[Depends(dependency)])
++    async def health():
++        return {"status": "healthy"}
++
++    # Mirrors the production registration: GET, mounted under the /api router.
++    @app.get("/api/tags", dependencies=[Depends(dependency)])
++    async def ollama_tags():
++        return {"models": []}
++
++    return TestClient(app)
++
++
++def _request_path(api_prefix: str, route_path: str, mode: str) -> str:
++    """The path the backend receives under each forwarding mode.
++
++    verbatim — the proxy (or the Vite dev proxy) forwards unchanged.
++    strip — nginx removes the prefix, per the example in MultiSiteDeployment.md.
++    """
++    return route_path if mode == "strip" else f"{api_prefix}{route_path}"
++
++
++@pytest.mark.parametrize("mode", ["verbatim", "strip"])
++@pytest.mark.parametrize("api_prefix", ["/api/v1", "/api", "/site01"])
++def test_protected_routes_stay_authenticated_under_any_prefix(
++    monkeypatch, api_prefix, mode
++):
++    """No prefix may exempt a protected route.
++
++    On the old code the three ``/api...`` prefixes answered 200 here — a full
++    unauthenticated read *and* an unauthenticated clear of the document store,
++    in both forwarding modes.
++    """
++    client = _client(monkeypatch, api_prefix)
++
++    path = _request_path(api_prefix, "/documents", mode)
++    assert client.get(path).status_code == 401
++    assert client.delete(path).status_code == 401
++
++
++@pytest.mark.parametrize("mode", ["verbatim", "strip"])
++@pytest.mark.parametrize("api_prefix", ["/api/v1", "/site01"])
++def test_health_stays_exempt_under_any_prefix(monkeypatch, api_prefix, mode):
++    """``/health`` promises to answer liveness probes unauthenticated (#3294).
++
++    On the old code a non-colliding prefix broke that promise: no whitelist entry
++    matched ``/site01/health``, so container and Kubernetes probes got 401.
++    """
++    client = _client(monkeypatch, api_prefix)
++
++    response = client.get(_request_path(api_prefix, "/health", mode))
++    assert response.status_code == 200
++    assert response.json() == {"status": "healthy"}
++
++
++@pytest.mark.parametrize("mode", ["verbatim", "strip"])
++@pytest.mark.parametrize("api_prefix", ["/api/v1", "/site01"])
++def test_ollama_routes_stay_exempt_under_any_prefix(monkeypatch, api_prefix, mode):
++    """The default whitelist exists for Ollama-client compatibility, which the
++    old matcher lost under a non-colliding prefix."""
++    client = _client(monkeypatch, api_prefix)
++
++    response = client.get(_request_path(api_prefix, "/api/tags", mode))
++    assert response.status_code == 200
++
++
++def test_no_prefix_behaviour_is_unchanged(monkeypatch):
++    """The stability half: with no prefix the normalization is a no-op and every
++    verdict must be exactly what it was before this change."""
++    client = _client(monkeypatch, "")
++
++    assert client.get("/documents").status_code == 401
++    assert client.delete("/documents").status_code == 401
++    assert client.get("/health").status_code == 200
++    assert client.get("/api/tags").status_code == 200
++
++
++@pytest.mark.parametrize("mode", ["verbatim", "strip"])
++def test_valid_credentials_still_reach_protected_routes(monkeypatch, mode):
++    """The prefix must not make an authenticated caller worse off either."""
++    client = _client(monkeypatch, "/api/v1")
++
++    response = client.get(
++        _request_path("/api/v1", "/documents", mode), headers={"X-API-Key": API_KEY}
++    )
++    assert response.status_code == 200
+diff --git a/tests/api/config/test_splash_ollama_warning.py b/tests/api/config/test_splash_ollama_warning.py
+new file mode 100644
+index 0000000000..65da00a258
+--- /dev/null
++++ b/tests/api/config/test_splash_ollama_warning.py
+@@ -0,0 +1,96 @@
++"""The startup banner's "Ollama routes are open" warning, and when it fires.
++
++The warning (GHSA-mmg5-8x8q-v934) tells an operator who enabled authentication
++that the default WHITELIST_PATHS still leaves /api/chat and /api/generate
++unauthenticated. It used to be gated on a non-loopback bind alone, which silently
++skipped the canonical multi-site deployment: with LIGHTRAG_API_PREFIX set, the
++reverse proxy holds the public interface and the backend binds loopback, so the
++routes are reachable from the network while the bind address says otherwise.
++
++The prefix is normalized before it is believed. LIGHTRAG_API_PREFIX=/ (or
++whitespace) means "no prefix", and reading the raw value would warn about a
++reverse proxy that does not exist.
++"""
++
++from __future__ import annotations
++
++import importlib
++import sys
++from unittest.mock import MagicMock
++
++import pytest
++
++pytestmark = pytest.mark.offline
++
++_WARNING_MARKER = "remain publicly accessible"
++
++
++def _splash(monkeypatch, *, host: str, api_prefix: str | None) -> str:
++    """Render the real banner over real parsed args and return its output.
++
++    ASCIIColors writes through its own stream rather than the stdout capsys
++    replaces, so the collector below captures the arguments it is handed."""
++    # WHITELIST_PATHS is pinned to the shipped default: a developer-local .env
++    # value would otherwise decide whether the warning applies at all. setenv,
++    # not delenv -- load_dotenv(override=False) would re-populate a deleted one.
++    monkeypatch.setenv("WHITELIST_PATHS", "/health,/api/*")
++    monkeypatch.setenv("LIGHTRAG_API_KEY", "an-api-key")
++
++    argv = ["lightrag-server", "--host", host]
++    if api_prefix is not None:
++        argv += ["--api-prefix", api_prefix]
++
++    original_argv = sys.argv.copy()
++    try:
++        sys.argv = argv
++        config = importlib.import_module("lightrag.api.config")
++        utils_api = importlib.import_module("lightrag.api.utils_api")
++        args = config.parse_args()
++        # The matcher reads module state captured at import time; the banner reads
++        # args. Keep them consistent.
++        monkeypatch.setattr(
++            utils_api, "whitelist_patterns", [("/health", False), ("/api", True)]
++        )
++        colors = MagicMock()
++        monkeypatch.setattr(utils_api, "ASCIIColors", colors)
++        utils_api.display_splash_screen(args)
++    finally:
++        sys.argv = original_argv
++
++    return "\n".join(str(arg) for call in colors.mock_calls for arg in call.args)
++
++
++def test_warns_on_a_network_bind(monkeypatch):
++    """The original trigger, unchanged."""
++    output = _splash(monkeypatch, host="0.0.0.0", api_prefix=None)
++
++    assert _WARNING_MARKER in output
++
++
++def test_warns_behind_a_reverse_proxy_prefix_on_loopback(monkeypatch):
++    """The canonical multi-site deployment: nginx public, backend on loopback.
++
++    Silent before this change -- the loopback bind suppressed the warning even
++    though the routes were served to the internet through the proxy.
++    """
++    output = _splash(monkeypatch, host="127.0.0.1", api_prefix="/site01")
++
++    assert _WARNING_MARKER in output
++    assert "reverse-proxy prefix" in output
++
++
++def test_silent_on_loopback_without_a_prefix(monkeypatch):
++    """Nothing is reachable, so nothing to warn about."""
++    output = _splash(monkeypatch, host="127.0.0.1", api_prefix=None)
++
++    assert _WARNING_MARKER not in output
++
++
++@pytest.mark.parametrize("api_prefix", ["", "/", "   "])
++def test_an_empty_prefix_is_not_a_reverse_proxy(monkeypatch, api_prefix):
++    """All three values normalize to "no prefix", so the loopback bind still
++    means unreachable. Believing the raw value would warn about a proxy that is
++    not there."""
++    output = _splash(monkeypatch, host="127.0.0.1", api_prefix=api_prefix)
++
++    assert _WARNING_MARKER not in output
+diff --git a/tests/api/test_admission_middleware.py b/tests/api/test_admission_middleware.py
+index 2e496e26d5..3e6fb434db 100644
+--- a/tests/api/test_admission_middleware.py
++++ b/tests/api/test_admission_middleware.py
+@@ -329,6 +329,41 @@ async def test_api_prefix_is_stripped_before_matching():
+     assert downstream.calls == 0
+ 
+ 
++@pytest.mark.parametrize(
++    "path",
++    [
++        "/api/v1/documents/upload",  # verbatim forwarding
++        "/documents/upload",  # nginx stripped the prefix
++    ],
++)
++async def test_mount_prefix_never_collapses_the_pre_auth_check(monkeypatch, path):
++    """The pre-auth check uses the same matcher as the route, so it inherited the
++    same defect: with the shipped default whitelist and a mount prefix starting
++    with ``/api``, every path matched the bare ``/api`` prefix entry and the
++    unauthenticated request was waved straight through to the body.
++
++    Both forwarding forms are covered because this middleware sits outside
++    ``_RootPathNormalizationMiddleware``: with a proxy that strips the prefix it
++    sees a bare path while ``root_path`` is already set.
++    """
++    monkeypatch.setattr(_utils_api, "auth_configured", True)
++    monkeypatch.setattr(
++        _utils_api, "whitelist_patterns", [("/health", False), ("/api", True)]
++    )
++    rag = await _rag(capacity=10)
++    downstream = _Downstream()
++    recorder = _Recorder()
++
++    scope = _scope(path=path)
++    scope["root_path"] = "/api/v1"
++    await _mw(rag, downstream, api_key="secret")(scope, recorder.receive, recorder.send)
++
++    assert recorder.status == 401
++    assert downstream.calls == 0
++    assert recorder.receives == 0  # refused before the body, as always
++    assert await _tokens(rag) == {}
++
++
+ async def test_disabled_capacity_is_a_pure_passthrough():
+     rag = await _rag(capacity=0, active=10_000)
+     downstream = _Downstream()
+diff --git a/tests/api/test_path_prefixes.py b/tests/api/test_path_prefixes.py
+index 3d653f0fb6..bddc799695 100644
+--- a/tests/api/test_path_prefixes.py
++++ b/tests/api/test_path_prefixes.py
+@@ -666,3 +666,107 @@ class name: the configured class IS a subclass now
+             "the gunicorn worker must not inject root_path; rely on FastAPI's "
+             "app-level root_path only — see TestUvicornRootPathSemantics docstring."
+         )
++
++
++class TestWhitelistUnderApiPrefix:
++    """WHITELIST_PATHS is matched against route paths, on the real application.
++
++    The unit-level matrix lives in tests/api/auth/test_whitelist_path_prefix.py;
++    these two cases pin the same contract on the app ``create_app`` actually
++    builds, because that is where the mount prefix, the normalizing middleware and
++    the routers' own auth dependency all come together.
++    """
++
++    @pytest.fixture
++    def _default_whitelist(self, monkeypatch):
++        """Pin the shipped default so a developer-local WHITELIST_PATHS in .env
++        (already baked into the module-level patterns at import time) cannot
++        change what these tests assert."""
++        original_argv = sys.argv.copy()
++        try:
++            # config resolves its args on first attribute access; importing under
++            # pytest's own argv would argparse it and exit.
++            sys.argv = [sys.argv[0]]
++            from lightrag.api import utils_api
++        finally:
++            sys.argv = original_argv
++
++        monkeypatch.setattr(
++            utils_api, "whitelist_patterns", [("/health", False), ("/api", True)]
++        )
++
++    @staticmethod
++    def _args_with_prefix(prefix: str):
++        from lightrag.api.config import parse_args
++
++        original_argv = sys.argv.copy()
++        try:
++            sys.argv = [
++                "lightrag-server",
++                "--api-prefix",
++                prefix,
++                "--key",
++                "test-api-key",
++            ]
++            return parse_args()
++        finally:
++            sys.argv = original_argv
++
++    @pytest.fixture
++    def _colliding_prefix_args(self):
++        """An api_prefix that collides with the default whitelist's /api entry —
++        the value the project's own --help suggests."""
++        return self._args_with_prefix("/api/v1")
++
++    @pytest.fixture
++    def _noncolliding_prefix_args(self):
++        """The prefix style the multi-site docs use. Nothing here collides with
++        the whitelist, so this is where the *under*-exemption showed: no entry
++        matched and the exempt routes started demanding credentials."""
++        return self._args_with_prefix("/site01")
++
++    @pytest.mark.parametrize("mode", ["verbatim", "strip"])
++    def test_destructive_route_requires_auth_under_a_colliding_prefix(
++        self, _colliding_prefix_args, _default_whitelist, mode
++    ):
++        """DELETE /documents answered 200 unauthenticated before this fix, in
++        both forwarding modes."""
++        with patch("lightrag.api.lightrag_server.LightRAG") as mock_rag:
++            mock_rag.return_value = MagicMock()
++            from lightrag.api.lightrag_server import create_app
++
++            client = TestClient(create_app(_colliding_prefix_args))
++            prefix = "" if mode == "strip" else "/api/v1"
++
++            assert client.delete(f"{prefix}/documents").status_code == 401
++            assert client.get(f"{prefix}/documents").status_code == 401
++
++    @pytest.mark.parametrize("mode", ["verbatim", "strip"])
++    def test_whitelisted_routes_stay_open_under_a_prefix(
++        self, _noncolliding_prefix_args, _default_whitelist, mode
++    ):
++        """/health must keep answering liveness probes (#3294) and the
++        Ollama-compatible routes must keep their documented exemption.
++
++        Both answered 401 under this prefix before the fix. The assertion is
++        "not 401" rather than 200 because these handlers reach further into a
++        LightRAG that is only a MagicMock here: /health reads shared storage that
++        no test initializes, and /api/tags feeds mock attributes to a Pydantic
++        response model. Both therefore fail *after* the auth gate, which is why
++        server exceptions are surfaced as responses rather than raised. Getting
++        past the dependency at all is the property under test; the unit-level
++        matrix pins the exact 200.
++        """
++        with patch("lightrag.api.lightrag_server.LightRAG") as mock_rag:
++            mock_rag.return_value = MagicMock()
++            from lightrag.api.lightrag_server import create_app
++
++            client = TestClient(
++                create_app(_noncolliding_prefix_args), raise_server_exceptions=False
++            )
++            prefix = "" if mode == "strip" else "/site01"
++
++            assert client.get(f"{prefix}/health").status_code != 401
++            # GET, matching the real registration; GET /api/chat would be a 405
++            # from the router without the dependency ever running.
++            assert client.get(f"{prefix}/api/tags").status_code != 401

@@ -1,0 +1,8 @@
+exit_code=0 timed_out=False oracle_hit=True
+detail: canary observed
+STDOUT:
+POC_8fc4983637eb210d8a1aaf7e_OK
+
+STDERR:
+WARNING: TOKEN_SECRET not set and AUTH_ACCOUNTS is not configured. Falling back to the default guest-mode JWT secret. 
+PoC: vulnerable build; exempt=True

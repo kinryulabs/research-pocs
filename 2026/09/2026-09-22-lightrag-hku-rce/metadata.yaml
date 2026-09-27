@@ -1,0 +1,50 @@
+schema_version: 1
+id: 2026-09-22-lightrag-hku-rce
+title: lightrag-hku code execution
+date: '2026-09-22'
+status: published
+maturity: proof-of-concept
+target:
+  product: lightrag-hku
+  vendor: lightrag-hku
+  ecosystem: PyPI
+  package: lightrag-hku
+  purl: pkg:pypi/lightrag-hku@1.5.5
+  versions:
+    range: <1.5.5
+    fixed: 1.5.5
+    introduced: null
+    vulnerable_validated: 1.5.4
+classification:
+  tags:
+  - rce
+  cwe:
+  - CWE-307
+  cvss:
+    score: 9.1
+    version: '3.1'
+    vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+  epss:
+    score: 0.00355
+    percentile: 0.2674
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-85734
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: poc.py
+  language: python
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-85734
+- https://github.com/hkuds/lightrag/commit/22ea2d0cbfa2b7002aa118bd0bf1780a69d489bc
