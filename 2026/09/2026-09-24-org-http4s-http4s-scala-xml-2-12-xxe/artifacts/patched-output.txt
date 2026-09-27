@@ -1,0 +1,13 @@
+exit_code=1 timed_out=False oracle_hit=False
+detail: no canary
+STDOUT:
+[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.1.0:java (default-cli) on project poc: An exception occurred while executing the Java class. DOCTYPE is disallowed when the feature "http://apache.org/xml/features/disallow-doctype-decl" set to true. -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException
+
+STDERR:
+ls: /usr/bin/mvn

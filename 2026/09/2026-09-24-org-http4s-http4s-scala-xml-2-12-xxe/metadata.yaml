@@ -1,0 +1,50 @@
+schema_version: 1
+id: 2026-09-24-org-http4s-http4s-scala-xml-2-12-xxe
+title: org.http4s:http4s-scala-xml_2.12 XML external entity injection
+date: '2026-09-24'
+status: published
+maturity: proof-of-concept
+target:
+  product: org.http4s:http4s-scala-xml_2.12
+  vendor: org.http4s:http4s-scala-xml_2.12
+  ecosystem: Maven
+  package: org.http4s:http4s-scala-xml_2.12
+  purl: pkg:maven/org.http4s%3Ahttp4s-scala-xml_2.12@0.24.1
+  versions:
+    range: <0.24.1
+    fixed: 0.24.1
+    introduced: null
+    vulnerable_validated: 0.24.0
+classification:
+  tags:
+  - xxe
+  cwe:
+  - CWE-611
+  cvss:
+    score: 9.3
+    version: '3.1'
+    vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:L
+  epss:
+    score: 0.00294
+    percentile: 0.1977
+    as_of: '2026-09-27'
+identifiers:
+  cve: CVE-2026-61741
+  ghsa: null
+  kev: false
+  internal: null
+verification:
+  method: differential
+  signal: a marker value passed in POC_CANARY is printed only when the vulnerable
+    code path runs; it appears on the affected build and not on the fixed build (both
+    exit 0)
+artifacts:
+  poc: Poc.java
+  language: java
+  supporting:
+  - artifacts/vuln-output.txt
+  - artifacts/patched-output.txt
+  - artifacts/patch-diff.txt
+references:
+- https://nvd.nist.gov/vuln/detail/CVE-2026-61741
+- https://github.com/http4s/http4s-scala-xml/commit/49dbbcef3ffeab6102aa061f3e409bfb2d12cbaa

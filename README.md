@@ -2,10 +2,11 @@
 
 Reproducible proof-of-concept write-ups for patched n-day vulnerabilities in open-source software. Each folder holds the PoC, the fix diff, and the recorded before/after output.
 
-24 published:
+25 published:
 
 | Date | Title | Target | Tags | IDs | Status |
 |---|---|---|---|---|---|
+| 2026-09-24 | [org.http4s:http4s-scala-xml_2.12 XML external entity injection](2026/09/2026-09-24-org-http4s-http4s-scala-xml-2-12-xxe/) | org.http4s:http4s-scala-xml_2.12 | `xxe` | CVE-2026-61741 | published |
 | 2026-09-23 | [io.moquette:moquette-broker Incorrect authorization](2026/09/2026-09-23-io-moquette-moquette-broker-authz/) | io.moquette:moquette-broker | `authz` | CVE-2026-85724 | published |
 | 2026-09-22 | [mcp-atlassian Missing authorization](2026/09/2026-09-22-mcp-atlassian-authz/) | mcp-atlassian | `authz` | CVE-2026-77244 | published |
 | 2026-09-18 | [lmdeploy Unsafe deserialization](2026/09/2026-09-18-lmdeploy-deserialization/) | lmdeploy | `deserialization` | CVE-2025-66455 | published |
