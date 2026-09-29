@@ -4,6 +4,7 @@ title: org.http4s:http4s-scala-xml_2.12 XML external entity injection
 date: '2026-09-24'
 status: published
 maturity: proof-of-concept
+cohort: unique-obscure
 target:
   product: org.http4s:http4s-scala-xml_2.12
   vendor: org.http4s:http4s-scala-xml_2.12
@@ -26,8 +27,8 @@ classification:
     vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:L
   epss:
     score: 0.00294
-    percentile: 0.1977
-    as_of: '2026-09-27'
+    percentile: 0.198
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-61741
   ghsa: null

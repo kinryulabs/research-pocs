@@ -7,7 +7,7 @@
 
 ## Summary
 
-Paella Player is a set of libraries to create a multi stream video player. Prior to Paella Player 2.12.11 (as used in Opencast prior to 19.7 and 20.2), there is a potential XSS attack though closed captions cue text. This vulnerability is fixed in 2.12.11. EPSS 0.56% (p44, as of 2026-09-27).
+Paella Player is a set of libraries to create a multi stream video player. Prior to Paella Player 2.12.11 (as used in Opencast prior to 19.7 and 20.2), there is a potential XSS attack though closed captions cue text. This vulnerability is fixed in 2.12.11. EPSS 0.56% (p44, as of 2026-09-29).
 
 ## Affected
 

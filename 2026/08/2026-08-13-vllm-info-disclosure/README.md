@@ -7,7 +7,7 @@
 
 ## Summary
 
-vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the validation_exception_handler in vllm/entrypoints/openai/server_utils.py converts FastAPI RequestValidationError objects with str(exc), and sanitize_message in vllm/entrypoints/utils.py does not remove traceback-style file paths, allowing unauthenticated malformed JSON requests to /v1/chat/completions, /v1/completions, /tokenize, and /detokenize to disclose the OS username, home and virtual-environment paths, Python version, internal package structure, line numbers, and endpoint handler names. This issue is fixed in version 0.26.0. EPSS 0.42% (p33, as of 2026-09-27).
+vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the validation_exception_handler in vllm/entrypoints/openai/server_utils.py converts FastAPI RequestValidationError objects with str(exc), and sanitize_message in vllm/entrypoints/utils.py does not remove traceback-style file paths, allowing unauthenticated malformed JSON requests to /v1/chat/completions, /v1/completions, /tokenize, and /detokenize to disclose the OS username, home and virtual-environment paths, Python version, internal package structure, line numbers, and endpoint handler names. This issue is fixed in version 0.26.0. EPSS 0.42% (p33, as of 2026-09-29).
 
 ## Affected
 

@@ -7,7 +7,7 @@
 
 ## Summary
 
-vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the /v1/completions/derender and /v1/chat/completions/derender endpoints accept caller-supplied GenerateResponse objects whose generate_responses, choices, token_ids, prompt_logprobs, logprobs.content, top_logprobs, and routed_experts structures are processed by OnlineDerenderer and tokenizer.decode before max_model_len, max_tokens, max_num_seqs, or response-size limits are enforced, allowing an authenticated API client to consume excessive CPU and memory and produce oversized responses. This issue is fixed in version 0.26.0. EPSS 0.47% (p37, as of 2026-09-27).
+vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the /v1/completions/derender and /v1/chat/completions/derender endpoints accept caller-supplied GenerateResponse objects whose generate_responses, choices, token_ids, prompt_logprobs, logprobs.content, top_logprobs, and routed_experts structures are processed by OnlineDerenderer and tokenizer.decode before max_model_len, max_tokens, max_num_seqs, or response-size limits are enforced, allowing an authenticated API client to consume excessive CPU and memory and produce oversized responses. This issue is fixed in version 0.26.0. EPSS 0.47% (p37, as of 2026-09-29).
 
 ## Affected
 

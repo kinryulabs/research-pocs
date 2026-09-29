@@ -7,7 +7,7 @@
 
 ## Summary
 
-HTTPX2 is a next generation HTTP client for Python. Prior to 2.11.0, Request._prepare() in src/httpx2/httpx2/_models.py can add a body-derived Content-Length header to a request that already contains a caller-supplied Transfer-Encoding header because its setdefault() processing checks each default header independently rather than treating the two framing headers as mutually exclusive. Fixed-size byte, JSON, form, and known-length multipart bodies can therefore be serialized over HTTP/1.1 with both headers, allowing request smuggling or connection desynchronization when downstream intermediaries disagree about which framing header takes precedence. This issue is fixed in version 2.11.0. EPSS 0.36% (p26, as of 2026-09-27).
+HTTPX2 is a next generation HTTP client for Python. Prior to 2.11.0, Request._prepare() in src/httpx2/httpx2/_models.py can add a body-derived Content-Length header to a request that already contains a caller-supplied Transfer-Encoding header because its setdefault() processing checks each default header independently rather than treating the two framing headers as mutually exclusive. Fixed-size byte, JSON, form, and known-length multipart bodies can therefore be serialized over HTTP/1.1 with both headers, allowing request smuggling or connection desynchronization when downstream intermediaries disagree about which framing header takes precedence. This issue is fixed in version 2.11.0. EPSS 0.36% (p26, as of 2026-09-29).
 
 ## Affected
 

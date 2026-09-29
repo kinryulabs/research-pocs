@@ -4,6 +4,7 @@ title: mcp-atlassian Missing authorization
 date: '2026-09-22'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: mcp-atlassian
   vendor: mcp-atlassian
@@ -28,8 +29,8 @@ classification:
     vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N
   epss:
     score: 0.00277
-    percentile: 0.1806
-    as_of: '2026-09-27'
+    percentile: 0.1808
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-77244
   ghsa: null

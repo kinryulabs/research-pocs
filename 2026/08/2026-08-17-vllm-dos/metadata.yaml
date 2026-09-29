@@ -4,6 +4,7 @@ title: vllm Uncontrolled resource consumption
 date: '2026-08-17'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: vllm
   vendor: vllm
@@ -25,8 +26,8 @@ classification:
     score: 4.3
   epss:
     score: 0.00466
-    percentile: 0.3783
-    as_of: '2026-09-27'
+    percentile: 0.3786
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-71486
   ghsa: null

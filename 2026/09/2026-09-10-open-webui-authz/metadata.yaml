@@ -4,6 +4,7 @@ title: open-webui Incorrect authorization
 date: '2026-09-10'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: open-webui
   vendor: open-webui
@@ -24,8 +25,8 @@ classification:
     score: 6.5
   epss:
     score: 0.00371
-    percentile: 0.285
-    as_of: '2026-09-27'
+    percentile: 0.2853
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-88006
   ghsa: null

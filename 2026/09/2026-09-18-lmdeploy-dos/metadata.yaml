@@ -4,6 +4,7 @@ title: lmdeploy Uncontrolled resource consumption
 date: '2026-09-18'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: lmdeploy
   vendor: lmdeploy
@@ -26,8 +27,8 @@ classification:
     vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H
   epss:
     score: 0.00442
-    percentile: 0.3591
-    as_of: '2026-09-27'
+    percentile: 0.3594
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-33625
   ghsa: null

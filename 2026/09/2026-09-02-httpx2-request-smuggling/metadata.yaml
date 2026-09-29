@@ -4,6 +4,7 @@ title: httpx2 HTTP request smuggling
 date: '2026-09-02'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: httpx2
   vendor: httpx2
@@ -24,8 +25,8 @@ classification:
     score: 5.6
   epss:
     score: 0.00356
-    percentile: 0.2681
-    as_of: '2026-09-27'
+    percentile: 0.2685
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-84380
   ghsa: null

@@ -4,6 +4,7 @@ title: vllm Sensitive information exposure
 date: '2026-08-13'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: vllm
   vendor: vllm
@@ -24,8 +25,8 @@ classification:
     score: 5.3
   epss:
     score: 0.00419
-    percentile: 0.3373
-    as_of: '2026-09-27'
+    percentile: 0.3376
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-73555
   ghsa: null

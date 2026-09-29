@@ -4,6 +4,7 @@ title: vllm Integer overflow
 date: '2026-08-13'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: vllm
   vendor: vllm
@@ -23,9 +24,9 @@ classification:
   cvss:
     score: 5.3
   epss:
-    score: 0.00404
-    percentile: 0.3201
-    as_of: '2026-09-27'
+    score: 0.00414
+    percentile: 0.3316
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-73558
   ghsa: null

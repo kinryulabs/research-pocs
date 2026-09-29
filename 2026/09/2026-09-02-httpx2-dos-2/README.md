@@ -7,7 +7,7 @@
 
 ## Summary
 
-HTTPX2 is a next generation HTTP client for Python. Prior to 2.12.0, the HTTPX2 content decoders in src/httpx2/httpx2/_decoders.py fully inflate each gzip, deflate, br, or zstd network chunk before iter_bytes() or aiter_bytes() yields bounded pieces to the application. A 64 KiB compressed chunk can expand to approximately 64 MiB in one intermediate allocation, so an attacker-controlled or compromised server can cause severe memory pressure or out-of-memory process termination even when the application streams the response. This issue is fixed in version 2.12.0. EPSS 0.63% (p48, as of 2026-09-27).
+HTTPX2 is a next generation HTTP client for Python. Prior to 2.12.0, the HTTPX2 content decoders in src/httpx2/httpx2/_decoders.py fully inflate each gzip, deflate, br, or zstd network chunk before iter_bytes() or aiter_bytes() yields bounded pieces to the application. A 64 KiB compressed chunk can expand to approximately 64 MiB in one intermediate allocation, so an attacker-controlled or compromised server can cause severe memory pressure or out-of-memory process termination even when the application streams the response. This issue is fixed in version 2.12.0. EPSS 0.63% (p48, as of 2026-09-29).
 
 ## Affected
 

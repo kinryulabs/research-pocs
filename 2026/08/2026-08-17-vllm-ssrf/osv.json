@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.6.0",
+  "id": "CVE-2026-73560",
+  "modified": "2026-09-29T17:09:29Z",
+  "published": "2026-08-17T00:00:00Z",
+  "summary": "vllm Server-side request forgery",
+  "details": "vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the MiMoV2OmniMultiModalProcessor in vllm/transformers_utils/processors/mimo_v2_omni.py passes attacker-controlled image and audio strings through _fetch_image, requests.get, and Image.open instead of MediaConnector, bypassing allowed_media_domains and allowed_local_media_path protections and allowing server-side requests and reads of arbitrary files accessible to the vLLM process. This issue is fixed in version 0.26.0.",
+  "aliases": [
+    "GHSA-4hhp-h66f-j5j7"
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "PyPI",
+        "name": "vllm",
+        "purl": "pkg:pypi/vllm@0.26.0"
+      },
+      "database_specific": {
+        "cwe": [
+          "CWE-918"
+        ]
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "0.26.0"
+            }
+          ]
+        }
+      ],
+      "versions": [
+        "0.25.1"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-73560"
+    },
+    {
+      "type": "FIX",
+      "url": "https://github.com/vllm-project/vllm/commit/ffd46bfab2128bb84146050e98b51a617c6575ab"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/commit/54503ecec0f3ac31e5ecfc5f28652e4cc42307b5"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/pull/43117"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/releases/tag/v0.26.0"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/security/advisories/GHSA-4hhp-h66f-j5j7"
+    }
+  ],
+  "database_specific": {
+    "cve": "CVE-2026-73560",
+    "cwe": [
+      "CWE-918"
+    ],
+    "cvss": {
+      "score": 6.5
+    },
+    "epss": {
+      "score": 0.00407,
+      "percentile": 0.3245,
+      "as_of": "2026-09-29"
+    }
+  }
+}

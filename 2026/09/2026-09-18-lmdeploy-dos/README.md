@@ -7,7 +7,7 @@
 
 ## Summary
 
-LMDeploy is a toolkit for compressing, deploying, and serving large language models. Versions 012.1 through 0.12.2 contain a code injection vulnerability in `lmdeploy/pytorch/config.py` line 620 that allows an attacker to execute arbitrary Python code by publishing a malicious HuggingFace model with a crafted `quantization_config.quant_dtype` value. When a user loads the model with lmdeploy, the `quant_dtype` is passed to `eval(f'torch.{quant_dtype}')` without any validation. Version 0.12.3 contains a patch. EPSS 0.44% (p35, as of 2026-09-27).
+LMDeploy is a toolkit for compressing, deploying, and serving large language models. Versions 012.1 through 0.12.2 contain a code injection vulnerability in `lmdeploy/pytorch/config.py` line 620 that allows an attacker to execute arbitrary Python code by publishing a malicious HuggingFace model with a crafted `quantization_config.quant_dtype` value. When a user loads the model with lmdeploy, the `quant_dtype` is passed to `eval(f'torch.{quant_dtype}')` without any validation. Version 0.12.3 contains a patch. EPSS 0.44% (p35, as of 2026-09-29).
 
 ## Affected
 

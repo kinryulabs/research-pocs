@@ -4,6 +4,7 @@ title: org.opencastproject:opencast-engage-paella-player-7 Cross-site scripting
 date: '2026-09-17'
 status: published
 maturity: proof-of-concept
+cohort: unique-obscure
 target:
   product: org.opencastproject:opencast-engage-paella-player-7
   vendor: org.opencastproject:opencast-engage-paella-player-7
@@ -26,8 +27,8 @@ classification:
     vector: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:N
   epss:
     score: 0.00559
-    percentile: 0.4434
-    as_of: '2026-09-27'
+    percentile: 0.4437
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-77615
   ghsa: null

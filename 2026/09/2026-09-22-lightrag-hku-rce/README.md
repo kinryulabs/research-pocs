@@ -7,7 +7,7 @@
 
 ## Summary
 
-LightRAG provides simple and fast retrieval-augmented generation. Prior to 1.5.5, the POST /login endpoint in lightrag/api/lightrag_server.py does not impose a rate limit, account lockout, delay, or counter for failed authentication attempts. A network attacker can submit password guesses at full request speed until a valid account password is found. Successful credential recovery grants authenticated access to documents, the knowledge graph, and administrative operations. This issue is fixed in version 1.5.5. EPSS 0.36% (p26, as of 2026-09-27).
+LightRAG provides simple and fast retrieval-augmented generation. Prior to 1.5.5, the POST /login endpoint in lightrag/api/lightrag_server.py does not impose a rate limit, account lockout, delay, or counter for failed authentication attempts. A network attacker can submit password guesses at full request speed until a valid account password is found. Successful credential recovery grants authenticated access to documents, the knowledge graph, and administrative operations. This issue is fixed in version 1.5.5. EPSS 0.36% (p26, as of 2026-09-29).
 
 ## Affected
 

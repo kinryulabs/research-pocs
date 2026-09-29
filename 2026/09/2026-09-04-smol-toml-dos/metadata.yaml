@@ -4,6 +4,7 @@ title: smol-toml Infinite-loop denial of service
 date: '2026-09-04'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: smol-toml
   vendor: smol-toml
@@ -25,8 +26,8 @@ classification:
     score: 8.2
   epss:
     score: 0.00524
-    percentile: 0.4213
-    as_of: '2026-09-27'
+    percentile: 0.4216
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-85730
   ghsa: null

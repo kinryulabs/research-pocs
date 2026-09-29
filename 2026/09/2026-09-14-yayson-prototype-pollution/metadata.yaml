@@ -4,6 +4,7 @@ title: yayson Prototype pollution
 date: '2026-09-14'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: yayson
   vendor: yayson
@@ -24,8 +25,8 @@ classification:
     score: 9.1
   epss:
     score: 0.0084
-    percentile: 0.5619
-    as_of: '2026-09-27'
+    percentile: 0.5621
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-61534
   ghsa: null

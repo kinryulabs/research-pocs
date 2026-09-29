@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.6.0",
+  "id": "CVE-2026-73558",
+  "modified": "2026-09-29T17:09:29Z",
+  "published": "2026-08-13T00:00:00Z",
+  "summary": "vllm Integer overflow",
+  "details": "vLLM is an inference and serving engine for large language models. Prior to 0.27.0, an integer overflow in blockIdx.x * 2 * d in activation_kernels.cu can cause act_and_mul_kernel to consume another batched user's input, allowing a request processed in the same inference batch to receive a partial or complete copy of another user's inference result. This issue is fixed in version 0.27.0.",
+  "aliases": [
+    "GHSA-7m6h-x95x-82q5"
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "PyPI",
+        "name": "vllm",
+        "purl": "pkg:pypi/vllm@0.27.0"
+      },
+      "database_specific": {
+        "cwe": [
+          "CWE-190"
+        ]
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "0.27.0"
+            }
+          ]
+        }
+      ],
+      "versions": [
+        "0.26.0"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-73558"
+    },
+    {
+      "type": "FIX",
+      "url": "https://github.com/vllm-project/vllm/commit/4bdc8a788d2e2ce9165d552b3d4d8b72604626bf"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/commit/451227cb3ff07989698fed982c2d3e4300257924"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/issues/42860"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/pull/49660"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/releases/tag/v0.27.0"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/vllm-project/vllm/security/advisories/GHSA-7m6h-x95x-82q5"
+    }
+  ],
+  "database_specific": {
+    "cve": "CVE-2026-73558",
+    "cwe": [
+      "CWE-190"
+    ],
+    "cvss": {
+      "score": 5.3
+    },
+    "epss": {
+      "score": 0.00414,
+      "percentile": 0.3316,
+      "as_of": "2026-09-29"
+    }
+  }
+}

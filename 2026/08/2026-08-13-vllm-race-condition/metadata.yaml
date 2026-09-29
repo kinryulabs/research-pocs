@@ -4,6 +4,7 @@ title: vllm Race condition
 date: '2026-08-13'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: vllm
   vendor: vllm
@@ -24,8 +25,8 @@ classification:
     score: 6.3
   epss:
     score: 0.00404
-    percentile: 0.3209
-    as_of: '2026-09-27'
+    percentile: 0.3212
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-73557
   ghsa: null

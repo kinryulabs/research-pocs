@@ -4,6 +4,7 @@ title: vllm Server-side request forgery
 date: '2026-08-17'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: vllm
   vendor: vllm
@@ -23,9 +24,9 @@ classification:
   cvss:
     score: 6.5
   epss:
-    score: 0.00436
-    percentile: 0.3538
-    as_of: '2026-09-27'
+    score: 0.00407
+    percentile: 0.3245
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-73560
   ghsa: null

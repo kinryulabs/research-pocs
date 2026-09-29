@@ -4,6 +4,7 @@ title: httpx2 Data amplification denial of service
 date: '2026-09-02'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: httpx2
   vendor: httpx2
@@ -24,8 +25,8 @@ classification:
     score: 7.5
   epss:
     score: 0.0063
-    percentile: 0.4808
-    as_of: '2026-09-27'
+    percentile: 0.4811
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-84382
   ghsa: null

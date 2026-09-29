@@ -4,6 +4,7 @@ title: gitpython Argument injection
 date: '2026-08-25'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: gitpython
   vendor: gitpython
@@ -24,8 +25,8 @@ classification:
     score: 9.8
   epss:
     score: 0.00775
-    percentile: 0.54
-    as_of: '2026-09-27'
+    percentile: 0.5402
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-78676
   ghsa: null

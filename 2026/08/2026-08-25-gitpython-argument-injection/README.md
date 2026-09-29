@@ -7,7 +7,7 @@
 
 ## Summary
 
-GitPython before 3.1.59 fails to safely re-serialize multi-line git-config values during write operations, corrupting dormant quoted values into injected directives like core.hooksPath. Attackers can craft config files with embedded newlines that become live git directives after any unrelated GitPython config write, enabling arbitrary code execution via hook invocation. EPSS 0.78% (p54, as of 2026-09-27).
+GitPython before 3.1.59 fails to safely re-serialize multi-line git-config values during write operations, corrupting dormant quoted values into injected directives like core.hooksPath. Attackers can craft config files with embedded newlines that become live git directives after any unrelated GitPython config write, enabling arbitrary code execution via hook invocation. EPSS 0.78% (p54, as of 2026-09-29).
 
 ## Affected
 

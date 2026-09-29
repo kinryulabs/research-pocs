@@ -4,6 +4,7 @@ title: '@zereight/mcp-gitlab DNS rebinding / missing host allowlist'
 date: '2026-09-15'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: '@zereight/mcp-gitlab'
   vendor: '@zereight/mcp-gitlab'
@@ -24,8 +25,8 @@ classification:
     score: 9.6
   epss:
     score: 0.00532
-    percentile: 0.4269
-    as_of: '2026-09-27'
+    percentile: 0.4272
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-61568
   ghsa: null

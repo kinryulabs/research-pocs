@@ -7,7 +7,7 @@
 
 ## Summary
 
-Open WebUI is an extensible, feature-rich, and user-friendly self-hosted AI platform. From 0.8.0 until 0.11.1, Open WebUI's OAuth token exchange endpoint issues a session for a provider access token without running the OAuth role management that the normal OAuth login callback runs. A user whose provider roles the login callback would refuse, or would demote, could still obtain a working session at their existing role through this endpoint. This issue is fixed in version 0.11.1. EPSS 0.37% (p28, as of 2026-09-27).
+Open WebUI is an extensible, feature-rich, and user-friendly self-hosted AI platform. From 0.8.0 until 0.11.1, Open WebUI's OAuth token exchange endpoint issues a session for a provider access token without running the OAuth role management that the normal OAuth login callback runs. A user whose provider roles the login callback would refuse, or would demote, could still obtain a working session at their existing role through this endpoint. This issue is fixed in version 0.11.1. EPSS 0.37% (p28, as of 2026-09-29).
 
 ## Affected
 

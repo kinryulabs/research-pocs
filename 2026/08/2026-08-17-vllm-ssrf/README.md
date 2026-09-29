@@ -7,7 +7,7 @@
 
 ## Summary
 
-vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the MiMoV2OmniMultiModalProcessor in vllm/transformers_utils/processors/mimo_v2_omni.py passes attacker-controlled image and audio strings through _fetch_image, requests.get, and Image.open instead of MediaConnector, bypassing allowed_media_domains and allowed_local_media_path protections and allowing server-side requests and reads of arbitrary files accessible to the vLLM process. This issue is fixed in version 0.26.0. EPSS 0.44% (p35, as of 2026-09-27).
+vLLM is an inference and serving engine for large language models. Prior to 0.26.0, the MiMoV2OmniMultiModalProcessor in vllm/transformers_utils/processors/mimo_v2_omni.py passes attacker-controlled image and audio strings through _fetch_image, requests.get, and Image.open instead of MediaConnector, bypassing allowed_media_domains and allowed_local_media_path protections and allowing server-side requests and reads of arbitrary files accessible to the vLLM process. This issue is fixed in version 0.26.0. EPSS 0.41% (p32, as of 2026-09-29).
 
 ## Affected
 

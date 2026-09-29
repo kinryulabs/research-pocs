@@ -7,7 +7,7 @@
 
 ## Summary
 
-vLLM is an inference and serving engine for large language models. Prior to 0.27.0, an integer overflow in blockIdx.x * 2 * d in activation_kernels.cu can cause act_and_mul_kernel to consume another batched user's input, allowing a request processed in the same inference batch to receive a partial or complete copy of another user's inference result. This issue is fixed in version 0.27.0. EPSS 0.40% (p32, as of 2026-09-27).
+vLLM is an inference and serving engine for large language models. Prior to 0.27.0, an integer overflow in blockIdx.x * 2 * d in activation_kernels.cu can cause act_and_mul_kernel to consume another batched user's input, allowing a request processed in the same inference batch to receive a partial or complete copy of another user's inference result. This issue is fixed in version 0.27.0. EPSS 0.41% (p33, as of 2026-09-29).
 
 ## Affected
 

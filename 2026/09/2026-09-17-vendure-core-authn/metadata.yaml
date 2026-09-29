@@ -4,6 +4,7 @@ title: '@vendure/core Improper authentication'
 date: '2026-09-17'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: '@vendure/core'
   vendor: '@vendure/core'
@@ -26,8 +27,8 @@ classification:
     vector: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
   epss:
     score: 0.00589
-    percentile: 0.4603
-    as_of: '2026-09-27'
+    percentile: 0.4605
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-63472
   ghsa: null

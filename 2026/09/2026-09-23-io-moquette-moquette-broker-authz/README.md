@@ -7,7 +7,7 @@
 
 ## Summary
 
-Moquette is a lightweight Java MQTT broker. Prior to 0.18.1, when pattern-based ACL rules are configured, AuthorizationsCollector.canDoOperation substitutes client ID and username values directly into rules containing %c or %u and then treats the result as an MQTT topic filter. A client that uses + or # in either identity can broaden the substituted filter and gain cross-tenant read and write access. A # identity can also produce an invalid filter that triggers a NullPointerException in Topic.match and disrupts session processing. This issue is fixed in version 0.18.1. EPSS 0.27% (p17, as of 2026-09-27).
+Moquette is a lightweight Java MQTT broker. Prior to 0.18.1, when pattern-based ACL rules are configured, AuthorizationsCollector.canDoOperation substitutes client ID and username values directly into rules containing %c or %u and then treats the result as an MQTT topic filter. A client that uses + or # in either identity can broaden the substituted filter and gain cross-tenant read and write access. A # identity can also produce an invalid filter that triggers a NullPointerException in Topic.match and disrupts session processing. This issue is fixed in version 0.18.1. EPSS 0.27% (p17, as of 2026-09-29).
 
 ## Affected
 

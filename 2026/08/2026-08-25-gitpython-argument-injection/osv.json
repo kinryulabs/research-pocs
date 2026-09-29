@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.6.0",
+  "id": "CVE-2026-78676",
+  "modified": "2026-09-29T17:09:31Z",
+  "published": "2026-08-25T00:00:00Z",
+  "summary": "gitpython Argument injection",
+  "details": "GitPython before 3.1.59 fails to safely re-serialize multi-line git-config values during write operations, corrupting dormant quoted values into injected directives like core.hooksPath. Attackers can craft config files with embedded newlines that become live git directives after any unrelated GitPython config write, enabling arbitrary code execution via hook invocation.",
+  "aliases": [
+    "GHSA-284h-m62q-gf8w",
+    "PYSEC-2026-3786"
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "PyPI",
+        "name": "gitpython",
+        "purl": "pkg:pypi/gitpython@3.1.59"
+      },
+      "database_specific": {
+        "cwe": [
+          "CWE-88"
+        ]
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "3.1.59"
+            }
+          ]
+        }
+      ],
+      "versions": [
+        "3.1.58"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-78676"
+    },
+    {
+      "type": "FIX",
+      "url": "https://github.com/gitpython-developers/gitpython/commit/66340d77aab9a7468f4aed3681d4ef1e3c0ec931"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/gitpython-developers/GitPython/security/advisories/GHSA-284h-m62q-gf8w"
+    },
+    {
+      "type": "WEB",
+      "url": "https://www.vulncheck.com/advisories/gitpython-before-remote-code-execution-via-config-injection"
+    }
+  ],
+  "database_specific": {
+    "cve": "CVE-2026-78676",
+    "cwe": [
+      "CWE-88"
+    ],
+    "cvss": {
+      "score": 9.8
+    },
+    "epss": {
+      "score": 0.00775,
+      "percentile": 0.5402,
+      "as_of": "2026-09-29"
+    }
+  }
+}

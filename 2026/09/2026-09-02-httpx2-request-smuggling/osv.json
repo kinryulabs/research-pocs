@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.6.0",
+  "id": "CVE-2026-84380",
+  "modified": "2026-09-29T17:09:32Z",
+  "published": "2026-09-02T00:00:00Z",
+  "summary": "httpx2 HTTP request smuggling",
+  "details": "HTTPX2 is a next generation HTTP client for Python. Prior to 2.11.0, Request._prepare() in src/httpx2/httpx2/_models.py can add a body-derived Content-Length header to a request that already contains a caller-supplied Transfer-Encoding header because its setdefault() processing checks each default header independently rather than treating the two framing headers as mutually exclusive. Fixed-size byte, JSON, form, and known-length multipart bodies can therefore be serialized over HTTP/1.1 with both headers, allowing request smuggling or connection desynchronization when downstream intermediaries disagree about which framing header takes precedence. This issue is fixed in version 2.11.0.",
+  "aliases": [
+    "GHSA-pf96-p4fj-6566"
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "PyPI",
+        "name": "httpx2",
+        "purl": "pkg:pypi/httpx2@2.11.0"
+      },
+      "database_specific": {
+        "cwe": [
+          "CWE-444"
+        ]
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "2.11.0"
+            }
+          ]
+        }
+      ],
+      "versions": [
+        "2.10.0"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-84380"
+    },
+    {
+      "type": "FIX",
+      "url": "https://github.com/pydantic/httpx2/commit/2b13fa92e4181d5e0f56772205360b2aa12f109d"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/commit/829b93a2393212996f613e635261f777d9ec6eab"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/pull/1137"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/releases/tag/v2.11.0"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/security/advisories/GHSA-pf96-p4fj-6566"
+    }
+  ],
+  "database_specific": {
+    "cve": "CVE-2026-84380",
+    "cwe": [
+      "CWE-444"
+    ],
+    "cvss": {
+      "score": 5.6
+    },
+    "epss": {
+      "score": 0.00356,
+      "percentile": 0.2685,
+      "as_of": "2026-09-29"
+    }
+  }
+}

@@ -7,7 +7,7 @@
 
 ## Summary
 
-smol-toml is a small, fast, and correct TOML parser and serializer. Prior to 1.7.1, parse() can enter an infinite loop when a value inside an array or inline table is followed by a comment with no trailing newline. In src/util.ts, skipUntil() calls indexOfNewline(), receives -1 at the end of input, and resets the cursor to the beginning of the string instead of leaving the structure scan. The parser then hangs indefinitely and can consume a service's processing capacity when an application parses attacker-controlled TOML. This issue is fixed in version 1.7.1. EPSS 0.52% (p42, as of 2026-09-27).
+smol-toml is a small, fast, and correct TOML parser and serializer. Prior to 1.7.1, parse() can enter an infinite loop when a value inside an array or inline table is followed by a comment with no trailing newline. In src/util.ts, skipUntil() calls indexOfNewline(), receives -1 at the end of input, and resets the cursor to the beginning of the string instead of leaving the structure scan. The parser then hangs indefinitely and can consume a service's processing capacity when an application parses attacker-controlled TOML. This issue is fixed in version 1.7.1. EPSS 0.52% (p42, as of 2026-09-29).
 
 ## Affected
 

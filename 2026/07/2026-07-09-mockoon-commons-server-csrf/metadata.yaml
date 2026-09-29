@@ -4,6 +4,7 @@ title: '@mockoon/commons-server Cross-site request forgery'
 date: '2026-07-09'
 status: published
 maturity: proof-of-concept
+cohort: topical-popular
 target:
   product: '@mockoon/commons-server'
   vendor: '@mockoon/commons-server'
@@ -27,8 +28,8 @@ classification:
     score: 8.8
   epss:
     score: 0.00262
-    percentile: 0.1622
-    as_of: '2026-09-27'
+    percentile: 0.1624
+    as_of: '2026-09-29'
 identifiers:
   cve: CVE-2026-59148
   ghsa: null

@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.6.0",
+  "id": "CVE-2026-85730",
+  "modified": "2026-09-29T17:09:33Z",
+  "published": "2026-09-04T00:00:00Z",
+  "summary": "smol-toml Infinite-loop denial of service",
+  "details": "smol-toml is a small, fast, and correct TOML parser and serializer. Prior to 1.7.1, parse() can enter an infinite loop when a value inside an array or inline table is followed by a comment with no trailing newline. In src/util.ts, skipUntil() calls indexOfNewline(), receives -1 at the end of input, and resets the cursor to the beginning of the string instead of leaving the structure scan. The parser then hangs indefinitely and can consume a service's processing capacity when an application parses attacker-controlled TOML. This issue is fixed in version 1.7.1.",
+  "aliases": [
+    "GHSA-7w5x-hrqm-74c2"
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "npm",
+        "name": "smol-toml",
+        "purl": "pkg:npm/smol-toml@1.7.1"
+      },
+      "database_specific": {
+        "cwe": [
+          "CWE-606",
+          "CWE-835"
+        ]
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "1.7.1"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-85730"
+    },
+    {
+      "type": "FIX",
+      "url": "https://github.com/squirrelchat/smol-toml/commit/3e978a945ef9b15056d55f6ad92dd48fb05fe28e"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/squirrelchat/smol-toml/commit/30f5c367d946b695f379b5d4f0946b2f0a0a8c2f"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/squirrelchat/smol-toml/releases/tag/v1.7.1"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/squirrelchat/smol-toml/security/advisories/GHSA-7w5x-hrqm-74c2"
+    },
+    {
+      "type": "WEB",
+      "url": "https://medium.com/@ravindu.lakmina1/seven-bytes-that-freeze-a-node-js-server-forever-the-story-of-cve-2026-85730-3213328b38f0"
+    }
+  ],
+  "database_specific": {
+    "cve": "CVE-2026-85730",
+    "cwe": [
+      "CWE-606",
+      "CWE-835"
+    ],
+    "cvss": {
+      "score": 8.2
+    },
+    "epss": {
+      "score": 0.00524,
+      "percentile": 0.4216,
+      "as_of": "2026-09-29"
+    }
+  }
+}

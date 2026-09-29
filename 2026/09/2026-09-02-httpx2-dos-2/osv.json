@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.6.0",
+  "id": "CVE-2026-84382",
+  "modified": "2026-09-29T17:09:32Z",
+  "published": "2026-09-02T00:00:00Z",
+  "summary": "httpx2 Data amplification denial of service",
+  "details": "HTTPX2 is a next generation HTTP client for Python. Prior to 2.12.0, the HTTPX2 content decoders in src/httpx2/httpx2/_decoders.py fully inflate each gzip, deflate, br, or zstd network chunk before iter_bytes() or aiter_bytes() yields bounded pieces to the application. A 64 KiB compressed chunk can expand to approximately 64 MiB in one intermediate allocation, so an attacker-controlled or compromised server can cause severe memory pressure or out-of-memory process termination even when the application streams the response. This issue is fixed in version 2.12.0.",
+  "aliases": [
+    "GHSA-8xx6-hgc6-gc2m"
+  ],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "PyPI",
+        "name": "httpx2",
+        "purl": "pkg:pypi/httpx2@2.12.0"
+      },
+      "database_specific": {
+        "cwe": [
+          "CWE-409"
+        ]
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "2.12.0"
+            }
+          ]
+        }
+      ],
+      "versions": [
+        "2.11.0"
+      ]
+    }
+  ],
+  "references": [
+    {
+      "type": "ADVISORY",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-84382"
+    },
+    {
+      "type": "FIX",
+      "url": "https://github.com/pydantic/httpx2/commit/71ae23be5448f859c2b4e21d9972ddfa7b8d759d"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/commit/4fd0c70a3f207c618b145934792f791bccfb39f8"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/pull/1126"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/releases/tag/v2.12.0"
+    },
+    {
+      "type": "WEB",
+      "url": "https://github.com/pydantic/httpx2/security/advisories/GHSA-8xx6-hgc6-gc2m"
+    }
+  ],
+  "database_specific": {
+    "cve": "CVE-2026-84382",
+    "cwe": [
+      "CWE-409"
+    ],
+    "cvss": {
+      "score": 7.5
+    },
+    "epss": {
+      "score": 0.0063,
+      "percentile": 0.4811,
+      "as_of": "2026-09-29"
+    }
+  }
+}
